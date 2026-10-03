@@ -29,7 +29,7 @@ cities:
   DEL: {name: Дели, timezone: Asia/Kolkata}
   KUL: {name: Куала-Лумпур, timezone: Asia/Kuala_Lumpur}
   SIN: {name: Сингапур, timezone: Asia/Singapore}
-  FRU: {name: Бишкек, timezone: Asia/Bishkek}
+  BSZ: {name: Бишкек, timezone: Asia/Bishkek}
 routes:
   - {id: cxr-direct, destination: CXR, direct_only: true, max_total_price: 31000}
   - {id: cxr-through, destination: CXR, direct_only: false, max_total_price: 31000}
@@ -54,5 +54,5 @@ routes:
   - {id: kul-dad, destination: DAD, hub: KUL, direct_only: true, max_total_price: 33500}
   - {id: sin-cxr, destination: CXR, hub: SIN, direct_only: true, max_total_price: 33500}
   - {id: sin-dad, destination: DAD, hub: SIN, direct_only: true, max_total_price: 33500}
-  - {id: fru-cxr, destination: CXR, hub: FRU, direct_only: true, max_total_price: 33500}
-  - {id: fru-dad, destination: DAD, hub: FRU, direct_only: true, max_total_price: 33500}
+  - {id: fru-cxr, destination: CXR, hub: BSZ, direct_only: true, max_total_price: 33500}
+  - {id: fru-dad, destination: DAD, hub: BSZ, direct_only: true, max_total_price: 33500}

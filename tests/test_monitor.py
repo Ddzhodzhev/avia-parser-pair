@@ -260,10 +260,40 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(rt.render(self.c).count('>Открыть</a>'), 1)
 
     def test_extra_hubs_enabled_for_both_destinations(self):
-        for hub in ('DXB', 'DEL', 'KUL', 'SIN', 'FRU'):
+        for hub in ('DXB', 'DEL', 'KUL', 'SIN', 'BSZ'):
             for destination in ('CXR', 'DAD'):
                 self.assertTrue(any(r.get('hub') == hub and r['destination'] == destination
                                     and r.get('enabled', True) for r in self.c['routes']))
+
+    def test_api_failure_sends_partial_report_and_preserves_error(self):
+        import os
+        import requests
+        for fail_bookings in (False, True):
+            with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
+                    'TRAVELPAYOUTS_TOKEN': 'test', 'TELEGRAM_BOT_TOKEN': 'test',
+                    'TELEGRAM_CHAT_ID': '1', 'DATA_DIR': directory}), \
+                    patch('sys.argv', ['monitor.py']), patch('aviasales.Client') as client, \
+                    patch('telegram.send_message') as send:
+                response = requests.Response()
+                response.status_code = 400
+                error = requests.HTTPError('sensitive response must not be sent', response=response)
+                def fetch(a, b, direct):
+                    if not fail_bookings and 'BSZ' in (a, b):
+                        raise error
+                    return []
+                client.return_value.fetch.side_effect = fetch
+                client.return_value.roundtrips.side_effect = error if fail_bookings else None
+                client.return_value.roundtrips.return_value = []
+                with self.assertLogs(level='ERROR'), self.assertRaisesRegex(RuntimeError, 'Отчёт неполный'):
+                    monitor.main()
+                text = '\n'.join(call.args[0] for call in send.call_args_list)
+                self.assertIn('Отчёт неполный', text)
+                self.assertIn('ошибка API: HTTP 400', text)
+                self.assertIn('нет вариантов', text)
+                self.assertNotIn('sensitive response', text)
+                history = monitor.load_json(Path(directory) / 'history.json', [])
+                self.assertTrue(history[-1]['errors'])
+                self.assertTrue(history[-1]['routes'])
 
     def test_report_includes_expensive_compatible_trips(self):
         offers = self.offers()

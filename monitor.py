@@ -10,6 +10,7 @@ import aviasales
 import config
 import routes
 import telegram
+import requests
 import reporting
 
 
@@ -92,10 +93,22 @@ def main():
         raise ValueError('Некорректный формат alerts.json')
     client = aviasales.Client(token, c, months)
     trips, counts, reports = {}, {}, []
+    failures = {}
     for route in c['routes']:
         if not route.get('enabled', True):
             continue
-        offers = {(a, b): client.fetch(a, b, route['direct_only']) for a, b in routes.edges(route, c['origin'])}
+        try:
+            offers = {(a, b): client.fetch(a, b, route['direct_only']) for a, b in routes.edges(route, c['origin'])}
+            bookings = client.roundtrips(c['origin'], route['destination'], route['direct_only']) if not route.get('hub') else []
+        except (requests.RequestException, RuntimeError, ValueError) as exc:
+            status = getattr(getattr(exc, 'response', None), 'status_code', None)
+            reason = f'HTTP {status}' if status else type(exc).__name__
+            failures[route['id']] = reason
+            logging.error('%s: поиск не завершён (%s)', route['id'], reason)
+            report = reporting.RouteReport(route, ([], []))
+            report.error = reason
+            reports.append(report)
+            continue
         directions = routes.directional_paths(route, offers, c)
         report = reporting.RouteReport(route, directions)
         reports.append(report)
@@ -106,7 +119,7 @@ def main():
                 trips[trip['key']] = trip
                 count += 1
         if not route.get('hub'):
-            for trip in routes.booked_trips(route, client.roundtrips(c['origin'], route['destination'], route['direct_only']), c, apply_price_limit=False):
+            for trip in routes.booked_trips(route, bookings, c, apply_price_limit=False):
                 report.add_trip(trip)
                 if trip['total'] <= route['max_total_price']:
                     trips[trip['key']] = trip
@@ -127,10 +140,12 @@ def main():
         history = load_json(history_path, [])
         if not isinstance(history, list):
             raise ValueError('Некорректный формат history.json')
-        history.append(dict(at=datetime.now(timezone.utc).isoformat(), routes=counts, notified=sent,
+        history.append(dict(at=datetime.now(timezone.utc).isoformat(), routes=counts, errors=failures, notified=sent,
                             cheapest=min((t['total'] for t in trips.values()), default=None)))
         save_json(history_path, history[-1000:])
     logging.info('Выгодных полных поездок: %d; уведомлений: %d', len(trips), sent)
+    if failures:
+        raise RuntimeError(f'Отчёт неполный: ошибок маршрутов {len(failures)}; доступные результаты отправлены')
 
 
 if __name__ == '__main__':

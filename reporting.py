@@ -25,6 +25,7 @@ class RouteReport:
                 histogram.add(sum(leg['price'] for leg in legs))
         self.seen = set()
         self.cheapest = None
+        self.error = None
 
     def add_trip(self, trip):
         if trip['key'] not in self.seen:
@@ -44,6 +45,8 @@ class RouteReport:
             limit = c.get('max_transfers_by_destination', {}).get(r['destination'])
             name += f' · ≤{limit} пересадки' if limit is not None else ' · с пересадками'
         title = f'<b>{escape(name)}</b>'
+        if self.error:
+            return [title + ' — ошибка API: ' + escape(self.error)]
         histograms = (self.outbound, self.inbound, self.roundtrip)
         if not any(sum(h.counts) for h in histograms):
             return [title + ' — нет вариантов']
@@ -86,6 +89,8 @@ def messages(reports, c, now):
               + (f' · дома до {end:%d.%m}' if end else '')
               + f' · {c["min_trip_days"]}–{c["max_trip_days"]} дней.\n'
               'Цены из кеша; время местное. RT = туда-обратно.')
+    if any(report.error for report in reports):
+        header += '\n⚠️ Отчёт неполный: часть маршрутов не проверена.'
     chunks, current = [], header
     for report in reports:
         blocks = report.blocks(c)
