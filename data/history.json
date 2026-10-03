@@ -1130,5 +1130,41 @@
     "errors": {},
     "summary_parts": 20,
     "cheapest": null
+  },
+  {
+    "at": "2026-10-03T19:08:23.032055+00:00",
+    "routes": {
+      "cxr-direct": 0,
+      "cxr-through": 0,
+      "dad-through": 0,
+      "han-cxr": 0,
+      "han-dad": 0,
+      "bkk-cxr": 0,
+      "bkk-dad": 0,
+      "ovb-cxr": 0,
+      "ala-cxr": 0,
+      "tas-cxr": 0,
+      "can-cxr": 0,
+      "hkg-dad": 0,
+      "sgn-cxr": 0,
+      "sgn-dad": 0,
+      "dxb-cxr": 0,
+      "dxb-dad": 0,
+      "del-cxr": 0,
+      "del-dad": 0,
+      "kul-cxr": 0,
+      "kul-dad": 0,
+      "sin-cxr": 0,
+      "sin-dad": 0,
+      "fru-cxr": 0,
+      "fru-dad": 0,
+      "hkt-through": 0,
+      "ovb-hkt": 0,
+      "bkk-through": 0,
+      "ovb-bkk": 0
+    },
+    "errors": {},
+    "summary_parts": 3,
+    "cheapest": null
   }
 ]
