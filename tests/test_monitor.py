@@ -330,8 +330,44 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(output.count('</blockquote>'), 12)
         self.assertNotIn('<pre>', output)
         for link in links:
-            self.assertEqual(output.count(link), 12)
+            self.assertEqual(output.count(link), 13)  # 12 detailed routes + one deduplicated summary entry.
         self.assertEqual(reporting.text_length('<b>🌍 &amp;</b>'), 4)
+
+    def test_top_five_sorts_deduplicates_and_updates_prices(self):
+        top = reporting.TopFive()
+        for i in range(10):
+            top.add(str(i), {'total': 100 + i})
+        top.add('0', {'total': 90})
+        top.add('1', {'total': 900})
+        self.assertEqual([x['total'] for x in top.ordered()], [90, 101, 102, 103, 104])
+
+    def test_summary_has_three_global_top_fives(self):
+        trip = next(routes.build_trips(self.route, self.offers(), self.c))
+        directions = routes.directional_paths(self.route, self.offers(), self.c)
+        reports = []
+        for repeat in range(2):
+            report = reporting.RouteReport(self.route, directions)
+            for i in range(8):
+                report.add_trip(dict(trip, key=str(i), total=70000 - i * 1000))
+            reports.append(report)
+        result = '\n'.join(reporting.summary_messages(reports, self.c))
+        self.assertIn('✈️ Туда', result)
+        self.assertIn('🏠 Обратно', result)
+        self.assertIn('🔁 Туда-обратно', result)
+        self.assertIn('5. <b>67000 ₽</b>', result)
+        self.assertNotIn('68000 ₽', result)
+        self.assertEqual(result.count('1. <b>'), 3)
+        self.assertNotIn('6. <b>', result)
+        self.assertEqual(result.count('63000 ₽'), 1)
+
+    def test_summary_rt_fare_does_not_create_one_way_prices(self):
+        trip = next(routes.build_trips(self.route, self.offers(), self.c))
+        report = reporting.RouteReport(self.route, ([], []))
+        report.add_trip(dict(trip, booking=True, legs=(trip['legs'][0], trip['legs'][-1])))
+        result = '\n'.join(reporting.summary_messages([report], self.c))
+        self.assertEqual(result.count('Нет вариантов'), 2)
+        self.assertEqual(result.count('href='), 1)
+        self.assertIn('Билет RT', result)
 
     def test_summary_sent_every_run_without_deals(self):
         import os

@@ -2,6 +2,7 @@
 from bisect import bisect_left
 from html import escape
 from html.parser import HTMLParser
+from aviasales import identity
 
 BOUNDS = list(range(5000, 50001, 5000))
 LABELS = ['≤5'] + [f'{n}–{n+5}' for n in range(5, 50, 5)] + ['>50']
@@ -38,18 +39,38 @@ class Histogram:
         self.minimum = price if self.minimum is None else min(self.minimum, price)
 
 
+class TopFive:
+    """Keep only the five cheapest distinct itineraries, with stable tie ordering."""
+    def __init__(self):
+        self.items = {}
+
+    def add(self, key, item):
+        if key not in self.items or item['total'] < self.items[key]['total']:
+            self.items[key] = item
+        if len(self.items) > 5:
+            worst = max(self.items, key=lambda k: (self.items[k]['total'], k))
+            del self.items[worst]
+
+    def ordered(self):
+        return [v for k, v in sorted(self.items.items(), key=lambda pair: (pair[1]['total'], pair[0]))]
+
+
 class RouteReport:
     def __init__(self, route, directions):
         self.route = route
         self.outbound, self.inbound, self.roundtrip = Histogram(), Histogram(), Histogram()
-        for histogram, paths in zip((self.outbound, self.inbound), directions):
+        self.tops = [TopFive(), TopFive(), TopFive()]
+        for index, (histogram, paths) in enumerate(zip((self.outbound, self.inbound), directions)):
             for legs in paths:
                 histogram.add(sum(leg['price'] for leg in legs))
+                key = '\n'.join(identity(leg) for leg in legs)
+                self.tops[index].add(key, dict(legs=legs, total=sum(leg['price'] for leg in legs), route=route))
         self.seen = set()
         self.cheapest = None
         self.error = None
 
     def add_trip(self, trip):
+        self.tops[2].add(trip['key'], trip)
         if trip['key'] not in self.seen:
             self.roundtrip.add(trip['total'])
             self.seen.add(trip['key'])
@@ -105,7 +126,7 @@ class RouteReport:
         return '\n'.join(self.blocks(c))
 
 
-def messages(reports, c, now):
+def messages(reports, c, now, include_summary=True):
     end = c.get('return_end')
     header = (f'<b>Проверка цен · {now:%d.%m %H:%M} UTC</b>\n'
               f'Москва ↔ Вьетнам · {c["departure_start"]:%d.%m.%Y}–{c["departure_end"]:%d.%m.%Y}'
@@ -135,5 +156,52 @@ def messages(reports, c, now):
             chunks.append(current)
             current = '<b>Цены · продолжение</b>'
         current += '\n\n' + block
+    chunks.append(current)
+    if include_summary:
+        chunks.extend(summary_messages(reports, c))
+    return chunks
+
+
+def summary_messages(reports, c):
+    tops = [TopFive(), TopFive(), TopFive()]
+    for report in reports:
+        if report.error:
+            continue
+        for target, source in zip(tops, report.tops):
+            for key, item in source.items.items():
+                target.add(key, item)
+    header = '<b>🏆 Топ-5 по цене</b>\nТуда и обратно — отдельные подборки; пара не гарантирована.'
+    if any(r.error for r in reports):
+        header += '\n⚠️ Только успешно проверенные маршруты.'
+    chunks, current = [], header
+    for index, title in enumerate(('✈️ Туда', '🏠 Обратно', '🔁 Туда-обратно')):
+        section = f'<b>{title}</b>'
+        items = tops[index].ordered()
+        if not items:
+            section += '\nНет вариантов'
+        for rank, item in enumerate(items, 1):
+            legs, route = item['legs'], item['route']
+            destination = c['cities'][route['destination']]['name']
+            name = destination if index == 2 else ('Москва → ' + destination if index == 0 else destination + ' → Москва')
+            if route.get('hub'):
+                name += ' через ' + c['cities'][route['hub']]['name']
+            else:
+                transfers = max(leg['transfers'] for leg in legs)
+                name += ' · прямой' if transfers == 0 else f' · пересадок ≤{transfers}'
+            dates = f'{legs[0]["dep"]:%d.%m}–{legs[-1]["arr"]:%d.%m}'
+            section += f'\n{rank}. <b>{item["total"]:g} ₽</b> · {escape(name)}\n{dates}'
+            if index == 2:
+                section += f' · {item["stay"]} дн.'
+            links = []
+            for n, leg in enumerate(legs):
+                if item.get('booking') and n > 0:
+                    continue
+                label = 'Билет RT' if item.get('booking') else f'{leg["origin_airport"] or leg["origin"]}→{leg["destination_airport"] or leg["destination"]} {leg["dep"]:%d.%m}'
+                links.append(f'<a href="{escape(leg["link"], quote=True)}">{escape(label)}</a>' if leg['link'] else escape(label) + ' (нет ссылки)')
+            section += '\n' + ' · '.join(links)
+        if text_length(current) + text_length(section) + 2 > 3800:
+            chunks.append(current)
+            current = '<b>🏆 Топ-5 · продолжение</b>'
+        current += '\n\n' + section
     chunks.append(current)
     return chunks
