@@ -8,6 +8,7 @@ max_trip_days: 15
 currency: rub
 market: ru
 max_alerts: 5
+max_transfers_by_destination: {CXR: 1} # На каждую сторону, включая стыковки отдельных билетов.
 min_connection_hours_outbound: 6
 min_connection_hours_return: 6
 airport_change_min_hours: 12 # Также применяется, когда аэропорт неизвестен.
@@ -44,9 +45,14 @@ routes:
   # Для Хошимина в контексте нет порога: начальный ориентир 32 000 ₽ RT.
   - {id: sgn-cxr, destination: CXR, hub: SGN, direct_only: true, max_total_price: 32000}
   - {id: sgn-dad, destination: DAD, hub: SGN, direct_only: true, max_total_price: 32000}
-  # Дополнительные хабы: включай маршруты и меняй порог по необходимости.
-  - {id: dxb-cxr, enabled: false, destination: CXR, hub: DXB, direct_only: true, max_total_price: 33500}
-  - {id: del-cxr, enabled: false, destination: CXR, hub: DEL, direct_only: true, max_total_price: 33500}
-  - {id: kul-cxr, enabled: false, destination: CXR, hub: KUL, direct_only: true, max_total_price: 33500}
-  - {id: sin-dad, enabled: false, destination: DAD, hub: SIN, direct_only: true, max_total_price: 33500}
-  - {id: fru-cxr, enabled: false, destination: CXR, hub: FRU, direct_only: true, max_total_price: 33500}
+  # Дополнительные хабы. Порог 33 500 ₽ RT — редактируемый начальный ориентир.
+  - {id: dxb-cxr, destination: CXR, hub: DXB, direct_only: true, max_total_price: 33500}
+  - {id: dxb-dad, destination: DAD, hub: DXB, direct_only: true, max_total_price: 33500}
+  - {id: del-cxr, destination: CXR, hub: DEL, direct_only: true, max_total_price: 33500}
+  - {id: del-dad, destination: DAD, hub: DEL, direct_only: true, max_total_price: 33500}
+  - {id: kul-cxr, destination: CXR, hub: KUL, direct_only: true, max_total_price: 33500}
+  - {id: kul-dad, destination: DAD, hub: KUL, direct_only: true, max_total_price: 33500}
+  - {id: sin-cxr, destination: CXR, hub: SIN, direct_only: true, max_total_price: 33500}
+  - {id: sin-dad, destination: DAD, hub: SIN, direct_only: true, max_total_price: 33500}
+  - {id: fru-cxr, destination: CXR, hub: FRU, direct_only: true, max_total_price: 33500}
+  - {id: fru-dad, destination: DAD, hub: FRU, direct_only: true, max_total_price: 33500}

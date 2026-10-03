@@ -33,11 +33,16 @@ def directional_paths(route, offers, c):
     else:
         outbound = [(o,) for o in offers[origin, dest]]
         inbound = [(o,) for o in offers[dest, origin]]
-    outbound = [p for p in outbound if c['departure_start'] <= p[0]['dep'].date() <= c['departure_end']
+    outbound = [p for p in outbound if transfers_allowed(p, route, c) and c['departure_start'] <= p[0]['dep'].date() <= c['departure_end']
                 and (not c.get('return_end') or p[-1]['arr'].date() + timedelta(days=c['min_trip_days']) <= c['return_end'])]
-    inbound = [p for p in inbound if p[0]['dep'].date() >= c['departure_start'] + timedelta(days=c['min_trip_days'])
+    inbound = [p for p in inbound if transfers_allowed(p, route, c) and p[0]['dep'].date() >= c['departure_start'] + timedelta(days=c['min_trip_days'])
                and return_allowed(p[-1], c)]
     return outbound, inbound
+
+
+def transfers_allowed(legs, route, c):
+    limit = c.get('max_transfers_by_destination', {}).get(route['destination'])
+    return limit is None or sum(o['transfers'] for o in legs) + len(legs) - 1 <= limit
 
 
 def return_allowed(last, c):
@@ -74,6 +79,7 @@ def booked_trips(route, bookings, c, apply_price_limit=True):
     for out, back in bookings:
         stay = (back['dep'].date() - out['arr'].date()).days
         if (c['departure_start'] <= out['dep'].date() <= c['departure_end']
+                and transfers_allowed((out,), route, c) and transfers_allowed((back,), route, c)
                 and c['min_trip_days'] <= stay <= c['max_trip_days']
                 and back['dep'] > out['arr'] and return_allowed(back, c)
                 and (not apply_price_limit or out['price'] <= route['max_total_price'])):

@@ -49,6 +49,9 @@ def load(path=ROOT / 'config.yaml'):
             raise ValueError(f'Неверный IATA-код: {city}')
         ZoneInfo(details['timezone'])
     ids = set()
+    for city, limit in c.get('max_transfers_by_destination', {}).items():
+        if city not in c['cities'] or type(limit) is not int or limit < 0:
+            raise ValueError('max_transfers_by_destination: нужен известный город и целое число >= 0')
     for r in c['routes']:
         if r['id'] in ids:
             raise ValueError('Повторяющийся id маршрута')

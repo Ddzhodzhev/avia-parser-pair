@@ -24,46 +24,78 @@ class RouteReport:
             for legs in paths:
                 histogram.add(sum(leg['price'] for leg in legs))
         self.seen = set()
+        self.cheapest = None
 
     def add_trip(self, trip):
         if trip['key'] not in self.seen:
             self.roundtrip.add(trip['total'])
             self.seen.add(trip['key'])
+            if self.cheapest is None or trip['total'] < self.cheapest['total']:
+                self.cheapest = trip
 
-    def render(self, c):
+    def blocks(self, c):
         r = self.route
         name = c['cities'][r['destination']]['name']
         if r.get('hub'):
             name += ' через ' + c['cities'][r['hub']]['name']
+        elif r['direct_only']:
+            name += ' · прямые'
         else:
-            name += ' · прямые' if r['direct_only'] else ' · включая пересадки'
+            limit = c.get('max_transfers_by_destination', {}).get(r['destination'])
+            name += f' · ≤{limit} пересадки' if limit is not None else ' · с пересадками'
+        title = f'<b>{escape(name)}</b>'
         histograms = (self.outbound, self.inbound, self.roundtrip)
-        rows = ['тыс.₽     туда обратно    RT']
+        if not any(sum(h.counts) for h in histograms):
+            return [title + ' — нет вариантов']
+        rows = ['тыс.₽   туда обратно   RT']
         for i, label in enumerate(LABELS):
-            rows.append(f'{label:>6} {self.outbound.counts[i]:>8} {self.inbound.counts[i]:>7} {self.roundtrip.counts[i]:>5}')
-        rows.append(f'Всего  {sum(self.outbound.counts):>8} {sum(self.inbound.counts):>7} {sum(self.roundtrip.counts):>5}')
+            if any(h.counts[i] for h in histograms):
+                rows.append(f'{label:>6} {self.outbound.counts[i]:>6} {self.inbound.counts[i]:>7} {self.roundtrip.counts[i]:>4}')
         minimum = ' / '.join('—' if h.minimum is None else f'{h.minimum:,.0f}'.replace(',', ' ') for h in histograms)
-        return (f'<b>Москва ↔ {escape(name)}</b>\n<pre>{escape(chr(10).join(rows))}</pre>\n'
-                f'Минимум туда / обратно / RT: {minimum} ₽\nПорог RT: {r["max_total_price"]:g} ₽')
+        blocks = [title + '\n<pre>' + escape('\n'.join(rows)) + '</pre>\n'
+                  + f'Мин. →/←/RT: {minimum} ₽ · порог {r["max_total_price"]:g} ₽']
+        trip = self.cheapest
+        if trip is None:
+            blocks.append('Совместимого RT нет')
+            return blocks
+        blocks.append(f"Лучший RT: <b>{trip['total']:g} ₽</b> · {trip['stay']} дней"
+                      + (' · единый тариф' if trip.get('booking') else ' · отдельные билеты'))
+        for index, leg in enumerate(trip['legs']):
+            label = (f"{leg['origin_airport'] or leg['origin']}→{leg['destination_airport'] or leg['destination']} "
+                     f"{leg['dep']:%d.%m %H:%M}–{leg['arr']:%d.%m %H:%M}")
+            if not trip.get('booking'):
+                label += f" · {leg['price']:g} ₽"
+            if leg['transfers']:
+                label += f" · пересадок {leg['transfers']}"
+            line = escape(label)
+            if leg['link'] and (not trip.get('booking') or index == 0):
+                line += f' <a href="{escape(leg["link"], quote=True)}">Открыть</a>'
+            elif not leg['link']:
+                line += ' · ссылки нет в API'
+            blocks.append(line)
+        return blocks
+
+    def render(self, c):
+        return '\n'.join(self.blocks(c))
 
 
 def messages(reports, c, now):
     end = c.get('return_end')
-    header = (f'<b>Проверка цен · {now:%d.%m.%Y %H:%M} UTC</b>\n'
-              f'Вылет: {c["departure_start"]:%d.%m.%Y}–{c["departure_end"]:%d.%m.%Y}. '
-              + (f'Прилёт в Москву до {end:%d.%m.%Y} включительно. ' if end else '')
-              + f'Во Вьетнаме {c["min_trip_days"]}–{c["max_trip_days"]} дней.\n'
-              'Числа — варианты из кеша, не места. Туда/обратно — целые маршруты в одну сторону, '
-              'без обязательной пары; RT — совместимые полные поездки, включая готовые тарифы. '
-              'RT-тарифы не делятся пополам.\n'
-              'Границы цен: нижняя не включена, верхняя включена. '
-              'Строки маршрутов могут пересекаться — их количества не складывать.')
+    header = (f'<b>Проверка цен · {now:%d.%m %H:%M} UTC</b>\n'
+              f'Москва ↔ Вьетнам · {c["departure_start"]:%d.%m.%Y}–{c["departure_end"]:%d.%m.%Y}'
+              + (f' · дома до {end:%d.%m}' if end else '')
+              + f' · {c["min_trip_days"]}–{c["max_trip_days"]} дней.\n'
+              'Цены из кеша; время местное. RT = туда-обратно.')
     chunks, current = [], header
     for report in reports:
-        block = report.render(c)
-        if len(current) + len(block) + 2 > 3800:
-            chunks.append(current)
-            current = '<b>Распределение цен · продолжение</b>'
-        current += '\n\n' + block
+        blocks = report.blocks(c)
+        # Prefer keeping a route together; split only between complete HTML blocks.
+        text = '\n'.join(blocks)
+        groups = [text] if len(text) <= 3700 else blocks
+        for block in groups:
+            if len(current) + len(block) + 2 > 3800:
+                chunks.append(current)
+                current = '<b>Цены · продолжение</b>'
+            current += '\n\n' + block
     chunks.append(current)
     return chunks
