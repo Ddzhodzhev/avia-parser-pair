@@ -159,6 +159,31 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(aviasales.normalize_roundtrips([item | dict(duration_back=0)],
                          'MOW', 'CXR', self.c, True, self.now), [])
 
+    def test_nha_city_cxr_airport_both_directions(self):
+        base = dict(departure_at='2027-03-01T20:00:00+03:00', duration_to=600,
+                    price=15000, transfers=0)
+        out = base | dict(origin='MOW', origin_airport='SVO', destination='NHA', destination_airport='CXR')
+        back = base | dict(origin='NHA', origin_airport='CXR', destination='MOW', destination_airport='SVO')
+        for item, origin, destination in [(out, 'MOW', 'CXR'), (back, 'CXR', 'MOW')]:
+            offers = aviasales.normalize([item], origin, destination, self.c, True, self.now)
+            self.assertEqual(len(offers), 1)
+            self.assertEqual((offers[0]['origin'], offers[0]['destination']), (origin, destination))
+        for airport in ('DAD', ''):
+            self.assertEqual(aviasales.normalize([out | dict(destination_airport=airport)],
+                             'MOW', 'CXR', self.c, True, self.now), [])
+
+    def test_nha_roundtrip_and_aggregated_reasons(self):
+        item = dict(origin='MOW', destination='NHA', destination_airport='CXR',
+                    departure_at='2027-04-30T20:00:00+03:00', return_at='2027-05-11T12:00:00+07:00',
+                    price=29000, duration_to=600, duration_back=660, transfers=0, return_transfers=0)
+        bookings = aviasales.normalize_roundtrips([item], 'MOW', 'CXR', self.c, True, self.now)
+        self.assertEqual(next(routes.booked_trips(self.c['routes'][0], bookings, self.c))['total'], 29000)
+        with self.assertLogs(level='INFO') as logs:
+            aviasales.normalize_roundtrips([item | dict(destination_airport='DAD')] * 3,
+                                          'MOW', 'CXR', self.c, True, self.now)
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn("'route_mismatch': 3", logs.output[0])
+
     def test_main_dry_run_with_mock_api(self):
         import os
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {

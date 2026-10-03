@@ -1,6 +1,7 @@
 """Travelpayouts cached offers. Never fabricate missing flight times."""
 import logging
 import math
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from urllib.parse import urljoin, urlparse
@@ -18,14 +19,28 @@ def timestamp(value):
     return value
 
 
-def normalize(items, origin, destination, c, direct_only, now=None):
+def endpoint_matches(item, field, requested):
+    # API returns city codes in origin/destination even for airport requests:
+    # a request for CXR can return destination=NHA, destination_airport=CXR.
+    return requested in (item.get(field), item.get(field + '_airport'))
+
+
+def log_rejections(origin, destination, rejected):
+    if rejected:
+        logging.info('%s → %s: пропущено %d; причины: %s', origin, destination,
+                     sum(rejected.values()), dict(rejected))
+
+
+def normalize(items, origin, destination, c, direct_only, now=None, rejections=None):
     now = now or datetime.now(timezone.utc)
     offers = {}
-    rejected = 0
+    rejected = rejections if rejections is not None else Counter()
     for item in items:
         try:
-            if item.get('return_at') or item.get('origin') != origin or item.get('destination') != destination:
-                raise ValueError('wrong route or round trip')
+            if item.get('return_at'):
+                raise ValueError('round_trip_in_one_way_results')
+            if not endpoint_matches(item, 'origin', origin) or not endpoint_matches(item, 'destination', destination):
+                raise ValueError('route_mismatch')
             price = float(item['price'])
             minutes = float(item.get('duration_to') or item['duration'])
             transfers = item['transfers']
@@ -51,10 +66,14 @@ def normalize(items, origin, destination, c, direct_only, now=None):
             key = identity(offer)
             if key not in offers or price < offers[key]['price']:
                 offers[key] = offer
-        except (KeyError, TypeError, ValueError, OverflowError):
-            rejected += 1
-    if rejected:
-        logging.info('%s → %s: пропущено непригодных записей: %s', origin, destination, rejected)
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            # Fixed reason names only: do not dump raw responses or tracking links.
+            known = {'round_trip_in_one_way_results', 'route_mismatch', 'invalid price or duration',
+                     'invalid transfers', 'expired', 'past departure', 'API timestamp lacks timezone'}
+            reason = str(exc) if str(exc) in known else 'missing_or_invalid_fields'
+            rejected[reason] += 1
+    if rejections is None:
+        log_rejections(origin, destination, rejected)
     return sorted(offers.values(), key=lambda o: o['dep'])
 
 
@@ -107,16 +126,19 @@ class Client:
 def normalize_roundtrips(items, origin, destination, c, direct_only, now=None):
     """Keep the RT fare whole. Reverse airports/carrier are not supplied by this API."""
     result = []
+    rejected = Counter()
     for item in items:
         if not item.get('return_at') or not item.get('duration_to') or not item.get('duration_back'):
+            rejected['missing_round_trip_times'] += 1
             continue
         outbound = dict(item, return_at=None, duration=item['duration_to'])
         inbound = dict(item, origin=destination, destination=origin, origin_airport='', destination_airport='',
                        departure_at=item['return_at'], return_at=None, duration=item['duration_back'],
                        duration_to=item['duration_back'], transfers=item.get('return_transfers'),
                        airline='', flight_number='')
-        out = normalize([outbound], origin, destination, c, direct_only, now)
-        back = normalize([inbound], destination, origin, c, direct_only, now)
+        out = normalize([outbound], origin, destination, c, direct_only, now, rejected)
+        back = normalize([inbound], destination, origin, c, direct_only, now, rejected)
         if out and back:
             result.append((out[0], back[0]))
+    log_rejections(origin, destination, rejected)
     return result
