@@ -258,8 +258,8 @@ class MonitorTests(unittest.TestCase):
         messages = reporting.summary_messages([vietnam, thailand], self.c)
         vn = '\n'.join(m for m in messages if 'Вьетнам · топ-10' in m)
         th = '\n'.join(m for m in messages if 'Таиланд · топ-10' in m)
-        self.assertIn('10. <b>10009 ₽</b>', vn)
-        self.assertIn('10. <b>90009 ₽</b>', th)
+        self.assertIn('<b>10004 ₽</b>', vn)
+        self.assertIn('<b>90004 ₽</b>', th)
         self.assertNotIn('Пхукет', vn)
         self.assertNotIn('через Бангкок', th)
         thailand.error = 'HTTP 400'
@@ -415,9 +415,9 @@ class MonitorTests(unittest.TestCase):
         output = '\n'.join(chunks)
         self.assertEqual(output.count('href='), 20)
         for i in range(5):
-            self.assertIn(f'{i+1}. <b>{20000+i} ₽</b>', output)
+            self.assertIn(f'<b>{20000+i} ₽</b>', output)
 
-    def test_summary_has_ten_unique_roundtrips_from_same_route(self):
+    def test_summary_keeps_five_unique_variants_per_route(self):
         trip = next(routes.build_trips(self.route, self.offers(), self.c))
         reports = []
         for repeat in range(2):
@@ -426,9 +426,9 @@ class MonitorTests(unittest.TestCase):
                 report.add_trip(dict(trip, key=str(i), total=70000 - i * 1000))
             reports.append(report)
         result = '\n'.join(reporting.summary_messages(reports, self.c))
-        self.assertIn('10. <b>65000 ₽</b>', result)
-        self.assertNotIn('66000 ₽', result)
-        self.assertEqual(result.count('1. <b>'), 1)
+        self.assertIn('<b>60000 ₽</b>', result)
+        self.assertNotIn('61000 ₽', result)
+        self.assertEqual(result.count('через Бангкок'), 1)
         self.assertNotIn('11. <b>', result)
         self.assertEqual(result.count('56000 ₽'), 1)
         self.assertNotIn('✈️ Туда', result)
@@ -440,7 +440,29 @@ class MonitorTests(unittest.TestCase):
         result = '\n'.join(reporting.summary_messages([report], self.c))
         self.assertEqual(result.count('Нет вариантов'), 0)
         self.assertEqual(result.count('href='), 1)
-        self.assertIn('Билет RT', result)
+        self.assertIn('>RT</a>', result)
+
+    def test_grouping_preserves_direct_and_more_expensive_routes(self):
+        r = next(r for r in self.c['routes'] if r['id'] == 'dad-through')
+        out = self.leg('MOW', 'DAD', '2027-03-01T20:00:00+03:00', 600)
+        back = self.leg('DAD', 'MOW', '2027-03-12T12:00:00+07:00', 600)
+        base = dict(route=r, legs=(out, back), stay=10, booking=True)
+        report = reporting.RouteReport(r, ([], []))
+        for i in range(20):
+            report.add_trip(dict(base, key=f'cheap{i}', total=30000+i,
+                                 legs=(dict(out, transfers=1), dict(back, transfers=1))))
+        report.add_trip(dict(base, key='direct', total=100000))
+        other = reporting.RouteReport(self.route, ([], []))
+        hub_trip = next(routes.build_trips(self.route, self.offers(), self.c))
+        other.add_trip(dict(hub_trip, total=110000))
+        result = '\n'.join(reporting.summary_messages([report, other], self.c))
+        self.assertIn('❗без пересадок', result)
+        self.assertIn('100000 ₽', result)
+        self.assertIn('через Бангкок', result)
+        self.assertIn('110000 ₽', result)
+        self.assertIn('30004 ₽', result)
+        self.assertNotIn('30005 ₽', result)
+        self.assertIn(' │ ', result)
 
     def test_summary_sent_every_run_without_deals(self):
         import os

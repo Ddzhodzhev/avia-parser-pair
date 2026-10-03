@@ -95,6 +95,14 @@ class TopOffers:
         return [v for k, v in sorted(self.items.items(), key=lambda pair: (pair[1]['total'], pair[0]))]
 
 
+def trip_group(item):
+    legs, route = item['legs'], item['route']
+    half = len(legs) // 2
+    changes = max(sum(o['transfers'] for o in legs[:half]) + half - 1,
+                  sum(o['transfers'] for o in legs[half:]) + half - 1)
+    return (route['destination'], route.get('hub') or '', changes)
+
+
 class RouteReport:
     def __init__(self, route, directions):
         self.route = route
@@ -105,11 +113,13 @@ class RouteReport:
                 histogram.add(sum(leg['price'] for leg in legs))
                 key = '\n'.join(identity(leg) for leg in legs)
                 self.tops[index].add(key, dict(legs=legs, total=sum(leg['price'] for leg in legs), route=route))
+        self.group_tops = {}
         self.seen = set()
         self.cheapest = None
         self.error = None
 
     def add_trip(self, trip):
+        self.group_tops.setdefault(trip_group(trip), TopOffers(5)).add(trip['key'], trip)
         self.tops[2].add(trip['key'], trip)
         if trip['key'] not in self.seen:
             self.roundtrip.add(trip['total'])
@@ -203,12 +213,15 @@ def summary_messages(reports, c):
 
 
 def _group_summary(reports, c, group):
-    top = TopOffers(10)
+    groups = {}
     for report in reports:
         if not report.error:
-            for key, item in report.tops[2].items.items():
-                top.add(key, item)
-    header = (f'<b>🏆 {escape(group)} · топ-10 туда-обратно</b>\n'
+            for group_key, source in report.group_tops.items():
+                target = groups.setdefault(group_key, TopOffers(5))
+                for key, item in source.items.items():
+                    target.add(key, item)
+    ordered = sorted(groups.items(), key=lambda pair: (pair[1].ordered()[0]['total'], pair[0]))[:10]
+    header = (f'<b>🏆 {escape(group)} · топ-10 маршрутов RT</b>\n'
               f'{c["departure_start"]:%d.%m.%Y}–{c["departure_end"]:%d.%m.%Y}'
               + (f' · дома до {c["return_end"]:%d.%m}' if c.get('return_end') else '')
               + f' · {c["min_trip_days"]}–{c["max_trip_days"]} дней\n'
@@ -218,24 +231,34 @@ def _group_summary(reports, c, group):
         header += '\n⚠️ Отчёт неполный: ' + '; '.join(
             escape(r.route['id'] + ' — ошибка API: ' + r.error) for r in errors)
     sections = []
-    for rank, item in enumerate(top.ordered(), 1):
-        legs, route = item['legs'], item['route']
-        name = 'Москва ↔ ' + c['cities'][route['destination']]['name']
-        if route.get('hub'):
-            name += ' через ' + c['cities'][route['hub']]['name']
-        else:
-            transfers = max(leg['transfers'] for leg in legs)
-            name += ' · прямые' if transfers == 0 else f' · пересадок ≤{transfers}'
-        section = (f'{rank}. <b>{item["total"]:g} ₽</b> · {escape(name)}\n'
-                   f'{legs[0]["dep"]:%d.%m}–{legs[-1]["arr"]:%d.%m} · {item["stay"]} дн.'
-                   + (' · единый тариф' if item.get('booking') else ' · отдельные билеты'))
-        links = []
-        for n, leg in enumerate(legs):
-            if item.get('booking') and n > 0:
-                continue
-            label = 'Билет RT' if item.get('booking') else f'{leg["origin_airport"] or leg["origin"]}→{leg["destination_airport"] or leg["destination"]} {leg["dep"]:%d.%m}'
-            links.append(f'<a href="{escape(leg["link"], quote=True)}">{escape(label)}</a>' if leg['link'] else escape(label) + ' (нет ссылки)')
-        sections.append([section, ' · '.join(links)])
+    for (destination, hub, changes), top in ordered:
+        name = c['cities'][c['origin']]['name'] + ' ↔ ' + c['cities'][destination]['name']
+        if hub:
+            name += ' через ' + c['cities'][hub]['name']
+        name += ' · ❗без пересадок' if changes == 0 else f' · ≤{changes} пересадки'
+        title = '<b>' + escape(name) + '</b>'
+        rows = []
+        for item in top.ordered():
+            legs = item['legs']
+            dates = f'{legs[0]["dep"]:%d.%m}–{legs[-1]["arr"]:%d.%m}'
+            links = []
+            for n, leg in enumerate(legs):
+                if item.get('booking') and n > 0:
+                    continue
+                label = 'RT' if item.get('booking') else ('туда' if n == 0 else 'обратно') if len(legs) == 2 else f'{leg["origin_airport"] or leg["origin"]}→{leg["destination_airport"] or leg["destination"]}'
+                links.append(f'<a href="{escape(leg["link"], quote=True)}">{escape(label)}</a>' if leg['link'] else escape(label) + ' (нет ссылки)')
+            rows.append(f'{dates} · <b>{item["total"]:g} ₽</b> · ' + '/'.join(links))
+        # Keep up to five dates under one heading; split with the heading repeated
+        # when hidden links exhaust Telegram's payload budget.
+        batch = []
+        for row in rows:
+            candidate = title + '\n' + ' │ '.join(batch + [row])
+            if batch and not fits_message('<b>Продолжение</b>\n\n' + candidate):
+                sections.append([title, ' │ '.join(batch)])
+                batch = []
+            batch.append(row)
+        if batch:
+            sections.append([title, ' │ '.join(batch)])
     if not sections:
         sections.append(['Нет вариантов полной поездки в полученных данных.'])
     return pack_sections(header, sections, f'<b>🏆 {escape(group)} · топ-10 RT · продолжение</b>')
