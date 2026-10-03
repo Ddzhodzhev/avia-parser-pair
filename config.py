@@ -1,75 +1,69 @@
-"""Настройки мониторинга. Всё можно переопределить через переменные окружения
-(в GitHub Actions они приходят из Secrets / workflow env)."""
-
+"""Validated, editable search settings; credentials stay in the environment."""
+import math
 import os
+from datetime import date, timedelta
+from pathlib import Path
+from zoneinfo import ZoneInfo
+import yaml
+
+ROOT = Path(__file__).resolve().parent
+
+def load_dotenv():
+    path = ROOT / '.env'
+    if path.exists():
+        for line in path.read_text().splitlines():
+            if line.strip() and not line.lstrip().startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                os.environ.setdefault(key.strip(), value.strip().strip('\"\''))
 
 
-def _load_dotenv(path: str = ".env") -> None:
-    """Минимальный загрузчик .env (без зависимостей). Не перетирает уже
-    заданные переменные окружения — в Actions приоритет у Secrets."""
-    if not os.path.exists(path):
-        return
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, value = line.partition("=")
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            if key and key not in os.environ:
-                os.environ[key] = value
+def load(path=ROOT / 'config.yaml'):
+    with open(path, encoding='utf-8') as stream:
+        c = yaml.safe_load(stream)
+    if not isinstance(c, dict):
+        raise ValueError('Конфиг должен быть YAML-объектом')
+    for key in ('departure_start', 'departure_end'):
+        c[key] = date.fromisoformat(str(c[key]))
+    if c['departure_start'] > c['departure_end']:
+        raise ValueError('departure_start должен быть не позже departure_end')
+    for key in ('min_trip_days', 'max_trip_days', 'max_alerts', 'max_leg_hours',
+                'min_connection_hours_outbound', 'min_connection_hours_return',
+                'airport_change_min_hours', 'max_connection_hours'):
+        if type(c[key]) is not int or c[key] <= 0:
+            raise ValueError(f'{key}: нужно положительное целое число')
+    if c['min_trip_days'] > c['max_trip_days']:
+        raise ValueError('min_trip_days > max_trip_days')
+    if max(c[k] for k in ('min_connection_hours_outbound', 'min_connection_hours_return',
+                          'airport_change_min_hours')) > c['max_connection_hours']:
+        raise ValueError('Минимальная пересадка больше максимальной')
+    if c['currency'] != 'rub':
+        raise ValueError('Пороги этого конфига заданы в рублях: currency должен быть rub')
+    for city, details in c['cities'].items():
+        if len(city) != 3 or not city.isupper():
+            raise ValueError(f'Неверный IATA-код: {city}')
+        ZoneInfo(details['timezone'])
+    ids = set()
+    for r in c['routes']:
+        if r['id'] in ids:
+            raise ValueError('Повторяющийся id маршрута')
+        ids.add(r['id'])
+        if type(r.get('enabled', True)) is not bool or type(r['direct_only']) is not bool:
+            raise ValueError('enabled и direct_only должны быть true/false')
+        cities = [c['origin'], r['destination']] + ([r['hub']] if r.get('hub') else [])
+        if len(set(cities)) != len(cities) or any(x not in c['cities'] for x in cities):
+            raise ValueError(f"Неверные города маршрута {r['id']}")
+        if type(r['max_total_price']) not in (int, float) or not math.isfinite(r['max_total_price']) or r['max_total_price'] <= 0:
+            raise ValueError('max_total_price должен быть положительным числом')
+    return c
 
 
-_load_dotenv()
-
-
-def _env(name: str, default: str) -> str:
-    value = os.environ.get(name, "").strip()
-    return value if value else default
-
-
-# --- Направление ---
-ORIGIN = _env("ORIGIN", "PEE")          # Пермь
-DESTINATION = _env("DESTINATION", "MOW")  # Москва (все аэропорты)
-
-# Месяцы для мониторинга в формате YYYY-MM через запятую.
-# По умолчанию — июль–август 2026.
-MONTHS = [m.strip() for m in _env("MONTHS", "2026-07,2026-08").split(",") if m.strip()]
-
-CURRENCY = _env("CURRENCY", "rub")
-MARKET = _env("MARKET", "ru")
-
-# --- Окно поездки (пара билетов туда+обратно) ---
-# Сколько дней пробыть в Москве: ищем обратный билет через MIN..MAX дней.
-MIN_STAY = int(_env("MIN_STAY", "7"))    # неделя
-MAX_STAY = int(_env("MAX_STAY", "14"))   # две недели
-
-# --- Логика «дёшево» ---
-# Алертим пары, которые дешевле средней (медианной) цены такой пары на эту долю.
-DROP_THRESHOLD = float(_env("DROP_THRESHOLD", "0.15"))  # 0.15 = на 15% дешевле среднего
-# Максимум пар в одном уведомлении (самые дешёвые).
-MAX_ALERTS = int(_env("MAX_ALERTS", "5"))
-# Только прямые рейсы (без пересадок).
-DIRECT_ONLY = _env("DIRECT_ONLY", "true").lower() == "true"
-# Абсолютный потолок цены одного билета: дороже — игнор как мусор (0 = выключено).
-MAX_PRICE = int(_env("MAX_PRICE", "0"))
-
-# Часовые пояса аэропортов (UTC-смещение) для расчёта времени прилёта.
-CITY_UTC_OFFSET = {
-    "PEE": 5,                                  # Пермь
-    "MOW": 3, "SVO": 3, "DME": 3, "VKO": 3, "ZIA": 3,  # Москва
-}
-
-# --- Секреты ---
-TRAVELPAYOUTS_TOKEN = os.environ.get("TRAVELPAYOUTS_TOKEN", "").strip()
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
-
-# --- Файлы состояния (коммитятся обратно в репозиторий) ---
-DATA_DIR = _env("DATA_DIR", "data")
-HISTORY_FILE = os.path.join(DATA_DIR, "history.json")
-ALERTS_FILE = os.path.join(DATA_DIR, "alerts.json")
-
-AVIASALES_BASE_URL = "https://www.aviasales.ru"
-API_URL = "https://api.travelpayouts.com/aviasales/v3/prices_for_dates"
+def search_months(c):
+    # Include travel to Vietnam, stay, and the return connection, including month rollover.
+    end = c['departure_end'] + timedelta(days=c['max_trip_days'] + math.ceil(
+        (3 * c['max_leg_hours'] + 2 * c['max_connection_hours']) / 24) + 2)
+    cursor = c['departure_start'].replace(day=1)
+    months = []
+    while cursor <= end:
+        months.append(cursor.strftime('%Y-%m'))
+        cursor = (cursor.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return months

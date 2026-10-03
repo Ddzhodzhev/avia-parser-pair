@@ -28,21 +28,20 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      - run: python -m unittest discover -s tests -v
+
+      - run: python monitor.py --check-config
+
       - name: Проверить цены
+        id: monitor
         env:
           TRAVELPAYOUTS_TOKEN: ${{ secrets.TRAVELPAYOUTS_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          # При желании можно переопределить настройки прямо здесь:
-          # ORIGIN: PEE
-          # DESTINATION: MOW
-          # MONTHS: "2026-07,2026-08"
-          # MIN_STAY: "7"
-          # MAX_STAY: "14"
-          # DROP_THRESHOLD: "0.15"
         run: python monitor.py
 
       - name: Сохранить историю цен
+        if: ${{ always() && steps.monitor.outcome != 'skipped' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -51,5 +50,6 @@ jobs:
             echo "Изменений нет."
           else
             git commit -m "chore: обновление истории цен [skip ci]"
-            git push
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
           fi

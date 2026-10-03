@@ -1,0 +1,50 @@
+# Даты вылета из Москвы включительно. Возврат может быть в мае.
+origin: MOW
+departure_start: '2027-03-01'
+departure_end: '2027-04-30'
+min_trip_days: 10
+max_trip_days: 15
+currency: rub
+market: ru
+max_alerts: 5
+min_connection_hours_outbound: 6
+min_connection_hours_return: 6
+airport_change_min_hours: 12 # Также применяется, когда аэропорт неизвестен.
+max_connection_hours: 48
+max_leg_hours: 36 # Максимальная длительность одного билета, включая его пересадки.
+cities:
+  MOW: {name: Москва, timezone: Europe/Moscow}
+  CXR: {name: Нячанг, timezone: Asia/Ho_Chi_Minh}
+  DAD: {name: Дананг, timezone: Asia/Ho_Chi_Minh}
+  HAN: {name: Ханой, timezone: Asia/Ho_Chi_Minh}
+  BKK: {name: Бангкок, timezone: Asia/Bangkok}
+  ALA: {name: Алматы, timezone: Asia/Almaty}
+  TAS: {name: Ташкент, timezone: Asia/Tashkent}
+  CAN: {name: Гуанчжоу, timezone: Asia/Shanghai}
+  HKG: {name: Гонконг, timezone: Asia/Hong_Kong}
+  SGN: {name: Хошимин, timezone: Asia/Ho_Chi_Minh}
+  DXB: {name: Дубай, timezone: Asia/Dubai}
+  DEL: {name: Дели, timezone: Asia/Kolkata}
+  KUL: {name: Куала-Лумпур, timezone: Asia/Kuala_Lumpur}
+  SIN: {name: Сингапур, timezone: Asia/Singapore}
+  FRU: {name: Бишкек, timezone: Asia/Bishkek}
+routes:
+  - {id: cxr-direct, destination: CXR, direct_only: true, max_total_price: 31000}
+  - {id: dad-through, destination: DAD, direct_only: false, max_total_price: 30000}
+  - {id: han-cxr, destination: CXR, hub: HAN, direct_only: true, max_total_price: 32000}
+  - {id: han-dad, destination: DAD, hub: HAN, direct_only: true, max_total_price: 32000}
+  - {id: bkk-cxr, destination: CXR, hub: BKK, direct_only: true, max_total_price: 33500}
+  - {id: bkk-dad, destination: DAD, hub: BKK, direct_only: true, max_total_price: 33500}
+  - {id: ala-cxr, destination: CXR, hub: ALA, direct_only: true, max_total_price: 31500}
+  - {id: tas-cxr, destination: CXR, hub: TAS, direct_only: true, max_total_price: 32000}
+  - {id: can-cxr, destination: CXR, hub: CAN, direct_only: true, max_total_price: 33500}
+  - {id: hkg-dad, destination: DAD, hub: HKG, direct_only: true, max_total_price: 33500}
+  # Для Хошимина в контексте нет порога: начальный ориентир 32 000 ₽ RT.
+  - {id: sgn-cxr, destination: CXR, hub: SGN, direct_only: true, max_total_price: 32000}
+  - {id: sgn-dad, destination: DAD, hub: SGN, direct_only: true, max_total_price: 32000}
+  # Дополнительные хабы: включай маршруты и меняй порог по необходимости.
+  - {id: dxb-cxr, enabled: false, destination: CXR, hub: DXB, direct_only: true, max_total_price: 33500}
+  - {id: del-cxr, enabled: false, destination: CXR, hub: DEL, direct_only: true, max_total_price: 33500}
+  - {id: kul-cxr, enabled: false, destination: CXR, hub: KUL, direct_only: true, max_total_price: 33500}
+  - {id: sin-dad, enabled: false, destination: DAD, hub: SIN, direct_only: true, max_total_price: 33500}
+  - {id: fru-cxr, enabled: false, destination: CXR, hub: FRU, direct_only: true, max_total_price: 33500}

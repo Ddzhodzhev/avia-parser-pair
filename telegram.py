@@ -1,24 +1,18 @@
-"""Отправка уведомлений в Telegram через Bot API."""
-
+"""Telegram delivery; callers record state only after confirmed success."""
+import os
 import requests
 
-import config
 
-
-def send_message(text: str) -> None:
-    if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
-        print("[telegram] Токен или chat_id не заданы — сообщение не отправлено:")
-        print(text)
-        return
-    url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendMessage"
-    resp = requests.post(
-        url,
-        data={
-            "chat_id": config.TELEGRAM_CHAT_ID,
-            "text": text,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": "false",
-        },
-        timeout=30,
-    )
-    resp.raise_for_status()
+def send_message(text):
+    token, chat = os.environ.get('TELEGRAM_BOT_TOKEN'), os.environ.get('TELEGRAM_CHAT_ID')
+    if not token or not chat:
+        raise RuntimeError('Задайте TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID или используйте --dry-run')
+    try:
+        response = requests.post(f'https://api.telegram.org/bot{token}/sendMessage',
+            data=dict(chat_id=chat, text=text, parse_mode='HTML', disable_web_page_preview='true'), timeout=30)
+        response.raise_for_status()
+        if response.json().get('ok') is not True:
+            raise RuntimeError('Telegram не подтвердил отправку')
+    except (requests.RequestException, ValueError):
+        # HTTP exceptions contain the request URL, which includes the secret token.
+        raise RuntimeError('Ошибка отправки Telegram; проверьте токен, chat_id и доступность API') from None

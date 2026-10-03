@@ -1,143 +1,127 @@
-"""Главный скрипт: ищет пары билетов (Пермь→Москва→Пермь) с зазором
-MIN_STAY..MAX_STAY дней и шлёт в Telegram те, что заметно дешевле средней
-цены такой пары.
-
-Запуск: python monitor.py
-Состояние (история типичной цены и уже отправленные алерты) хранится в
-data/*.json и коммитится обратно в репозиторий.
-"""
-
+"""Fetch, join, threshold, deduplicate and notify. See --help for offline validation."""
+import argparse
 import json
+import logging
 import os
-import statistics
-from datetime import date, datetime, timezone
-
+from datetime import datetime, timezone
+from html import escape
+from pathlib import Path
 import aviasales
 import config
+import routes
 import telegram
 
 
-def load_json(path: str, default):
-    if not os.path.exists(path):
+def load_json(path, default):
+    if not path.exists():
         return default
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return default
+    with path.open(encoding='utf-8') as stream:
+        return json.load(stream)  # Corrupt state must not silently cause duplicate alerts.
 
 
-def save_json(path: str, data) -> None:
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def save_json(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    temporary.replace(path)
 
 
-def _days_between(d1: str, d2: str) -> int:
-    return (date.fromisoformat(d2) - date.fromisoformat(d1)).days
+def format_trip(trip, c):
+    r = trip['route']
+    name = escape(c['cities'][r['destination']]['name'])
+    via = ' через ' + escape(c['cities'][r['hub']]['name']) if r.get('hub') else ''
+    ticket_type = 'Единый тариф RT' if trip.get('booking') else 'Отдельные билеты'
+    lines = [f"✈️ Москва ↔ {name}{via}", f"<b>{trip['total']:g} ₽ туда-обратно</b> · {trip['stay']} дней во Вьетнаме",
+             f"Порог: {r['max_total_price']:g} ₽. {ticket_type}; время местное."]
+    for o in trip['legs']:
+        lines.append(f"\n{escape(o['origin_airport'] or o['origin'])} → {escape(o['destination_airport'] or o['destination'])}: "
+                     f"{o['dep']:%d.%m.%Y %H:%M} → {o['arr']:%d.%m.%Y %H:%M}\n"
+                     + ('' if trip.get('booking') else f"{o['price']:g} ₽ · ")
+                     + f"{escape(o['airline'] + o['flight_number'])} · пересадок: {o['transfers']}")
+        if o['link']:
+            lines.append(f'<a href="{escape(o["link"], quote=True)}">Проверить билет</a>')
+    lines.append('\nЦены из кеша: проверьте наличие, багаж и итоговую стоимость по ссылкам.')
+    text = '\n'.join(lines)
+    if len(text) > 4000:
+        # Long tracking URLs can exceed Telegram limits. Flight dates/details remain usable.
+        text = '\n'.join(line for line in lines if not line.startswith('<a href='))
+    return text
 
 
-def build_pairs(outbound: dict[str, dict], inbound: dict[str, dict]) -> list[dict]:
-    """Все пары (туда, обратно) с зазором MIN_STAY..MAX_STAY дней."""
-    pairs: list[dict] = []
-    for out_date, out in sorted(outbound.items()):
-        for ret_date, ret in inbound.items():
-            stay = _days_between(out_date, ret_date)
-            if config.MIN_STAY <= stay <= config.MAX_STAY:
-                pairs.append({
-                    "key": f"{out_date}|{ret_date}",
-                    "out": out,
-                    "ret": ret,
-                    "stay": stay,
-                    "total": out["price"] + ret["price"],
-                })
-    pairs.sort(key=lambda p: p["total"])
-    return pairs
+def notify(trips, alerts, c, state_path, dry_run=False):
+    sent = 0
+    for trip in sorted(trips, key=lambda t: t['total']):
+        old = alerts.get(trip['key'])
+        if old is not None and trip['total'] >= old:
+            continue
+        message = format_trip(trip, c)
+        if dry_run:
+            print(message)
+        else:
+            telegram.send_message(message)
+            alerts[trip['key']] = trip['total']
+            save_json(state_path, alerts)
+        sent += 1
+        if sent >= c['max_alerts']:
+            break
+    return sent
 
 
-def _leg_line(label: str, leg: dict) -> str:
-    arr = leg["arr_time"]
-    if leg.get("arr_day_shift"):
-        arr += f" (+{leg['arr_day_shift']})"
-    transfers = leg["transfers"]
-    t = "прямой" if transfers == 0 else f"пересадок: {transfers}"
-    return (
-        f"{label} <b>{leg['date']}</b>  ✈️ {leg['dep_time']} → 🛬 {arr}\n"
-        f"   {leg['price']} {config.CURRENCY.upper()} · {t} · {leg['airline']}{leg['flight_number']}\n"
-        f'   <a href="{leg["link"]}">билет на Aviasales</a>'
-    )
-
-
-def format_pair(pair: dict, typical: int) -> str:
-    drop_pct = round((1 - pair["total"] / typical) * 100)
-    return (
-        f"💰 <b>Пара за {pair['total']} {config.CURRENCY.upper()}</b> "
-        f"(обычно ~{typical} → дешевле на {drop_pct}%)\n"
-        f"🗓 {pair['stay']} дней в Москве\n\n"
-        f"{_leg_line('Туда:', pair['out'])}\n\n"
-        f"{_leg_line('Обратно:', pair['ret'])}"
-    )
-
-
-def main() -> None:
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-    history: list[dict] = load_json(config.HISTORY_FILE, [])
-    if not isinstance(history, list):  # сброс старого формата
-        history = []
-    alerts: dict[str, int] = load_json(config.ALERTS_FILE, {})
-    if not isinstance(alerts, dict):
-        alerts = {}
-
-    outbound = aviasales.fetch_oneway(config.ORIGIN, config.DESTINATION)
-    inbound = aviasales.fetch_oneway(config.DESTINATION, config.ORIGIN)
-    pairs = build_pairs(outbound, inbound)
-    print(f"[{now}] Дат туда: {len(outbound)}, обратно: {len(inbound)}, пар: {len(pairs)}")
-
-    if not pairs:
-        print("Подходящих пар не найдено.")
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=Path, default=config.ROOT / 'config.yaml')
+    parser.add_argument('--check-config', action='store_true')
+    parser.add_argument('--dry-run', action='store_true', help='Запросить API, печатать результаты без отправки и записи состояния')
+    args = parser.parse_args()
+    config.load_dotenv()
+    c = config.load(args.config)
+    months = config.search_months(c)
+    if args.check_config:
+        print(f"Конфиг корректен. Вылеты: {c['departure_start']} — {c['departure_end']}; месяцы API: {', '.join(months)}")
         return
-
-    totals = [p["total"] for p in pairs]
-    typical = int(statistics.median(totals))
-    threshold = typical * (1 - config.DROP_THRESHOLD)
-    print(f"Средняя (медианная) цена пары: {typical}; порог алерта: <= {int(threshold)}")
-
-    # Запоминаем «пульс» рынка для истории.
-    history.append({"at": now, "typical": typical, "cheapest": totals[0]})
-
-    # Собираем новые/подешевевшие пары. ВСЕ подходящие помечаем как виденные
-    # (даже сверх лимита) — иначе на след. прогонах они будут слаться как «новые».
-    fresh: list[dict] = []
-    for pair in pairs:
-        if pair["total"] > threshold:
-            break  # pairs отсортированы по цене — дальше только дороже
-        last = alerts.get(pair["key"])
-        if last is None or pair["total"] < last:
-            alerts[pair["key"]] = pair["total"]
-            fresh.append(pair)
-
-    # В уведомление — только самые дешёвые MAX_ALERTS из новых.
-    messages: list[str] = []
-    for pair in fresh[: config.MAX_ALERTS]:
-        messages.append(format_pair(pair, typical))
-        print(f"  ALERT {pair['key']}: {pair['total']} (-{round((1 - pair['total']/typical)*100)}%)")
-    if len(fresh) > config.MAX_ALERTS:
-        print(f"  (ещё {len(fresh) - config.MAX_ALERTS} подходящих пар скрыто, отмечены как виденные)")
-
-    if messages:
-        header = (
-            f"🔥 <b>Дешёвые пары {config.ORIGIN} → {config.DESTINATION} → {config.ORIGIN}</b> "
-            f"({config.MIN_STAY}–{config.MAX_STAY} дней в Москве)"
-        )
-        telegram.send_message(header + "\n\n" + "\n\n———\n\n".join(messages))
-        print(f"Отправлено пар: {len(messages)}")
-    else:
-        print("Аномально дешёвых пар нет (либо уже отправляли).")
-
-    save_json(config.HISTORY_FILE, history)
-    save_json(config.ALERTS_FILE, alerts)
+    token = os.environ.get('TRAVELPAYOUTS_TOKEN', '').strip()
+    if not token:
+        raise ValueError('Задайте TRAVELPAYOUTS_TOKEN в .env или GitHub Secrets')
+    if not args.dry_run and not all(os.environ.get(k, '').strip() for k in ('TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID')):
+        raise ValueError('Нужны секреты Telegram или --dry-run')
+    data_dir = Path(os.environ.get('DATA_DIR', str(config.ROOT / 'data')))
+    state_path = data_dir / 'alerts.json'
+    alerts = load_json(state_path, {})
+    if not isinstance(alerts, dict) or any(type(v) not in (int, float) for v in alerts.values()):
+        raise ValueError('Некорректный формат alerts.json')
+    client = aviasales.Client(token, c, months)
+    trips, counts = {}, {}
+    for route in c['routes']:
+        if not route.get('enabled', True):
+            continue
+        offers = {(a, b): client.fetch(a, b, route['direct_only']) for a, b in routes.edges(route, c['origin'])}
+        count = 0
+        for trip in routes.build_trips(route, offers, c):
+            trips[trip['key']] = trip
+            count += 1
+        if not route.get('hub'):
+            for trip in routes.booked_trips(route, client.roundtrips(c['origin'], route['destination'], route['direct_only']), c):
+                trips[trip['key']] = trip
+                count += 1
+        counts[route['id']] = count
+        logging.info('%s: предложений по плечам %s; выгодных поездок %d', route['id'],
+                     [len(v) for v in offers.values()], count)
+    sent = notify(trips.values(), alerts, c, state_path, args.dry_run)
+    if not args.dry_run:
+        history_path = data_dir / 'history.json'
+        history = load_json(history_path, [])
+        if not isinstance(history, list):
+            raise ValueError('Некорректный формат history.json')
+        history.append(dict(at=datetime.now(timezone.utc).isoformat(), routes=counts, notified=sent,
+                            cheapest=min((t['total'] for t in trips.values()), default=None)))
+        save_json(history_path, history[-1000:])
+    logging.info('Выгодных полных поездок: %d; уведомлений: %d', len(trips), sent)
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+    try:
+        main()
+    except (ValueError, KeyError, OSError, RuntimeError) as exc:
+        logging.error('%s', exc)
+        raise SystemExit(1) from None

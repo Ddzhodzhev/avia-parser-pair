@@ -1,103 +1,122 @@
-"""Запросы к официальному API Aviasales (Travelpayouts Data API, v3).
-
-Тянем односторонние билеты по каждому направлению. Из двух направлений
-(туда и обратно) в monitor.py собираются пары с нужным зазором по датам.
-"""
-
+"""Travelpayouts cached offers. Never fabricate missing flight times."""
+import logging
+import math
 from datetime import datetime, timedelta, timezone
-
+from zoneinfo import ZoneInfo
+from urllib.parse import urljoin, urlparse
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-import config
-
-
-def _fetch_month(origin: str, dest: str, month: str) -> list[dict]:
-    """Самые дешёвые односторонние билеты по каждой дате месяца ('YYYY-MM')."""
-    params = {
-        "origin": origin,
-        "destination": dest,
-        "departure_at": month,
-        "currency": config.CURRENCY,
-        "one_way": "true",
-        "sorting": "price",
-        "direct": "true" if config.DIRECT_ONLY else "false",
-        "limit": 1000,
-        "page": 1,
-        "market": config.MARKET,
-        "token": config.TRAVELPAYOUTS_TOKEN,
-    }
-    resp = requests.get(config.API_URL, params=params, timeout=30)
-    resp.raise_for_status()
-    payload = resp.json()
-    if not payload.get("success", True):
-        raise RuntimeError(f"API вернул ошибку: {payload}")
-    return payload.get("data", [])
+API_URL = 'https://api.travelpayouts.com/aviasales/v3/prices_for_dates'
 
 
-def _city_offset(code: str) -> int | None:
-    return config.CITY_UTC_OFFSET.get(code)
+def timestamp(value):
+    value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    if value.tzinfo is None:
+        raise ValueError('API timestamp lacks timezone')
+    return value
 
 
-def _arrival_local(dep_iso: str, duration_min: int, dest_airport: str, dest_city: str):
-    """Время прилёта в местном времени аэропорта назначения.
-
-    Возвращает (строка 'HH:MM', смещение в днях относительно даты вылета).
-    Если часовой пояс назначения неизвестен — показываем в поясе вылета.
-    """
-    dep = datetime.fromisoformat(dep_iso)  # aware, пояс вылета
-    arrive = dep + timedelta(minutes=duration_min or 0)
-    off = _city_offset(dest_airport)
-    if off is None:
-        off = _city_offset(dest_city)
-    if off is not None:
-        arrive = arrive.astimezone(timezone(timedelta(hours=off)))
-    day_shift = (arrive.date() - dep.date()).days
-    return arrive.strftime("%H:%M"), day_shift
-
-
-def _normalize(items: list[dict]) -> dict[str, dict]:
-    """Минимальная цена на каждую дату вылета + детали этого билета."""
-    by_date: dict[str, dict] = {}
+def normalize(items, origin, destination, c, direct_only, now=None):
+    now = now or datetime.now(timezone.utc)
+    offers = {}
+    rejected = 0
     for item in items:
-        price = item.get("price")
-        dep_iso = item.get("departure_at") or ""
-        if not price or not dep_iso:
-            continue
-        if config.MAX_PRICE and price > config.MAX_PRICE:
-            continue
-        if config.DIRECT_ONLY and item.get("transfers", 0) != 0:
-            continue
-        date = dep_iso[:10]  # YYYY-MM-DD
-        if date in by_date and price >= by_date[date]["price"]:
-            continue
+        try:
+            if item.get('return_at') or item.get('origin') != origin or item.get('destination') != destination:
+                raise ValueError('wrong route or round trip')
+            price = float(item['price'])
+            minutes = float(item.get('duration_to') or item['duration'])
+            transfers = item['transfers']
+            if not math.isfinite(price) or price <= 0 or not 0 < minutes <= c['max_leg_hours'] * 60:
+                raise ValueError('invalid price or duration')
+            if type(transfers) is not int or transfers < 0 or (direct_only and transfers != 0):
+                raise ValueError('invalid transfers')
+            if item.get('expires_at') and timestamp(item['expires_at']) <= now:
+                raise ValueError('expired')
+            dep = timestamp(item['departure_at']).astimezone(ZoneInfo(c['cities'][origin]['timezone']))
+            if dep <= now:
+                raise ValueError('past departure')
+            arr = (dep.astimezone(timezone.utc) + timedelta(minutes=minutes)).astimezone(
+                ZoneInfo(c['cities'][destination]['timezone']))
+            link = urljoin('https://www.aviasales.ru', item.get('link') or '')
+            if urlparse(link).scheme != 'https' or urlparse(link).hostname not in ('www.aviasales.ru', 'www.aviasales.com', 'aviasales.ru', 'aviasales.com'):
+                link = ''
+            offer = dict(origin=origin, destination=destination, price=price, dep=dep, arr=arr,
+                         origin_airport=item.get('origin_airport') or '',
+                         destination_airport=item.get('destination_airport') or '',
+                         airline=str(item.get('airline', '')), flight_number=str(item.get('flight_number', '')),
+                         transfers=transfers, link=link)
+            key = identity(offer)
+            if key not in offers or price < offers[key]['price']:
+                offers[key] = offer
+        except (KeyError, TypeError, ValueError, OverflowError):
+            rejected += 1
+    if rejected:
+        logging.info('%s → %s: пропущено непригодных записей: %s', origin, destination, rejected)
+    return sorted(offers.values(), key=lambda o: o['dep'])
 
-        dep = datetime.fromisoformat(dep_iso)
-        arr_time, day_shift = _arrival_local(
-            dep_iso,
-            item.get("duration_to") or item.get("duration") or 0,
-            item.get("destination_airport", ""),
-            item.get("destination", ""),
-        )
-        link = item.get("link", "")
-        full_link = config.AVIASALES_BASE_URL + link if link.startswith("/") else link
 
-        by_date[date] = {
-            "date": date,
-            "price": price,
-            "dep_time": dep.strftime("%H:%M"),
-            "arr_time": arr_time,
-            "arr_day_shift": day_shift,  # +1 если прилёт на след. день
-            "transfers": item.get("transfers", 0),
-            "airline": item.get("airline", ""),
-            "flight_number": item.get("flight_number", ""),
-            "link": full_link,
-        }
-    return by_date
+def identity(o):
+    return '|'.join(str(o[k]) for k in ('origin', 'destination', 'origin_airport',
+        'destination_airport', 'dep', 'arr', 'airline', 'flight_number', 'transfers'))
 
 
-def fetch_oneway(origin: str, dest: str) -> dict[str, dict]:
-    """Словарь {дата вылета: дешёвый билет} по всем месяцам из конфига."""
-    items: list[dict] = []
-    for month in config.MONTHS:
-        items.extend(_fetch_month(origin, dest, month))
-    return _normalize(items)
+class Client:
+    def __init__(self, token, c, months):
+        self.c, self.months = c, months
+        self.session = requests.Session()
+        self.session.headers['X-Access-Token'] = token
+        self.session.mount('https://', HTTPAdapter(max_retries=Retry(
+            total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])))
+        self.cache = {}
+
+    def raw(self, origin, destination, direct_only, one_way=True):
+        key = origin, destination, direct_only, one_way
+        if key in self.cache:
+            return self.cache[key]
+        items = []
+        for month in self.months:
+            for page in range(1, 101):
+                response = self.session.get(API_URL, params=dict(origin=origin, destination=destination,
+                    departure_at=month, currency=self.c['currency'], market=self.c['market'],
+                    one_way=str(one_way).lower(), direct=str(direct_only).lower(), unique='false',
+                    sorting='price', limit=1000, page=page), timeout=30)
+                response.raise_for_status()
+                payload = response.json()
+                if payload.get('success') is not True or not isinstance(payload.get('data'), list):
+                    raise RuntimeError(f'Некорректный ответ API: {origin} → {destination}, {month}')
+                rows = payload['data']
+                items.extend(rows)
+                if len(rows) < 1000:
+                    break
+            else:
+                raise RuntimeError('Превышен лимит страниц API; поиск неполон')
+        self.cache[key] = items
+        return self.cache[key]
+
+    def fetch(self, origin, destination, direct_only):
+        return normalize(self.raw(origin, destination, direct_only), origin, destination, self.c, direct_only)
+
+    def roundtrips(self, origin, destination, direct_only):
+        return normalize_roundtrips(self.raw(origin, destination, direct_only, False),
+                                    origin, destination, self.c, direct_only)
+
+
+def normalize_roundtrips(items, origin, destination, c, direct_only, now=None):
+    """Keep the RT fare whole. Reverse airports/carrier are not supplied by this API."""
+    result = []
+    for item in items:
+        if not item.get('return_at') or not item.get('duration_to') or not item.get('duration_back'):
+            continue
+        outbound = dict(item, return_at=None, duration=item['duration_to'])
+        inbound = dict(item, origin=destination, destination=origin, origin_airport='', destination_airport='',
+                       departure_at=item['return_at'], return_at=None, duration=item['duration_back'],
+                       duration_to=item['duration_back'], transfers=item.get('return_transfers'),
+                       airline='', flight_number='')
+        out = normalize([outbound], origin, destination, c, direct_only, now)
+        back = normalize([inbound], destination, origin, c, direct_only, now)
+        if out and back:
+            result.append((out[0], back[0]))
+    return result
