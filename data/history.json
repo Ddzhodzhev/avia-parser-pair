@@ -938,5 +938,24 @@
     "at": "2026-07-08T10:23:59+00:00",
     "typical": 13321,
     "cheapest": 8645
+  },
+  {
+    "at": "2026-10-03T09:18:35.361895+00:00",
+    "routes": {
+      "cxr-direct": 0,
+      "dad-through": 0,
+      "han-cxr": 0,
+      "han-dad": 0,
+      "bkk-cxr": 0,
+      "bkk-dad": 0,
+      "ala-cxr": 0,
+      "tas-cxr": 0,
+      "can-cxr": 0,
+      "hkg-dad": 0,
+      "sgn-cxr": 0,
+      "sgn-dad": 0
+    },
+    "notified": 0,
+    "cheapest": null
   }
 ]
