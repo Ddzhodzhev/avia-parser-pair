@@ -27,9 +27,10 @@ def paths(first, second, c, direction):
 
 def directional_paths(route, offers, c):
     origin, dest, hub = c['origin'], route['destination'], route.get('hub')
+    return_hub = route.get('return_hub') or hub
     if hub:
         outbound = list(paths(offers[origin, hub], offers[hub, dest], c, 'outbound'))
-        inbound = list(paths(offers[dest, hub], offers[hub, origin], c, 'return'))
+        inbound = list(paths(offers[dest, return_hub], offers[return_hub, origin], c, 'return'))
     else:
         outbound = [(o,) for o in offers[origin, dest]]
         inbound = [(o,) for o in offers[dest, origin]]
@@ -72,7 +73,8 @@ def build_trips(route, offers, c, apply_price_limit=True, directions=None):
 
 def edges(route, origin):
     dest, hub = route['destination'], route.get('hub')
-    return [(origin, hub), (hub, dest), (dest, hub), (hub, origin)] if hub else [(origin, dest), (dest, origin)]
+    return_hub = route.get('return_hub') or hub
+    return [(origin, hub), (hub, dest), (dest, return_hub), (return_hub, origin)] if hub else [(origin, dest), (dest, origin)]
 
 
 def booked_trips(route, bookings, c, apply_price_limit=True):
@@ -85,3 +87,35 @@ def booked_trips(route, bookings, c, apply_price_limit=True):
                 and (not apply_price_limit or out['price'] <= route['max_total_price'])):
             key = hashlib.sha256(('RT\n' + identity(out) + '\n' + identity(back)).encode()).hexdigest()
             yield dict(key=key, legs=(out, back), total=out['price'], stay=stay, route=route, booking=True)
+
+
+def mixed_hub_directions(sources):
+    """Pair already validated one-way paths from enabled, successful hub searches.
+
+    Ready-made RT fares are never split: sources contain independent tickets only.
+    Each ordered hub pair is a separate route, with no additional API requests.
+    """
+    for outbound_route, outbound_paths in sources:
+        if not outbound_route.get('hub') or not outbound_paths[0]:
+            continue
+        for inbound_route, inbound_paths in sources:
+            if (not inbound_route.get('hub') or not inbound_paths[1]
+                    or outbound_route['destination'] != inbound_route['destination']
+                    or outbound_route['hub'] == inbound_route['hub']):
+                continue
+            destination = outbound_route['destination']
+            hub, return_hub = outbound_route['hub'], inbound_route['hub']
+            route = dict(id=f'mixed-{destination.lower()}-{hub.lower()}-{return_hub.lower()}',
+                         destination=destination, hub=hub, return_hub=return_hub,
+                         direct_only=True,
+                         max_total_price=min(outbound_route['max_total_price'], inbound_route['max_total_price']))
+            yield route, (outbound_paths[0], inbound_paths[1])
+
+
+def via_label(route, c):
+    if not route.get('hub'):
+        return ''
+    hub = c['cities'][route['hub']]['name']
+    if route.get('return_hub') and route['return_hub'] != route['hub']:
+        return f" · туда через {hub}, обратно через {c['cities'][route['return_hub']]['name']}"
+    return ' через ' + hub

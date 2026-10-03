@@ -3,6 +3,7 @@ from bisect import bisect_left
 from html import escape
 from html.parser import HTMLParser
 from aviasales import identity
+from routes import via_label
 
 BOUNDS = list(range(5000, 50001, 5000))
 LABELS = ['≤5'] + [f'{n}–{n+5}' for n in range(5, 50, 5)] + ['>50']
@@ -100,7 +101,7 @@ def trip_group(item):
     half = len(legs) // 2
     changes = max(sum(o['transfers'] for o in legs[:half]) + half - 1,
                   sum(o['transfers'] for o in legs[half:]) + half - 1)
-    return (route['destination'], route.get('hub') or '', changes)
+    return (route['destination'], route.get('hub') or '', changes, route.get('return_hub') or route.get('hub') or '')
 
 
 class RouteReport:
@@ -133,7 +134,7 @@ class RouteReport:
         r = self.route
         name = c['cities'][r['destination']]['name']
         if r.get('hub'):
-            name += ' через ' + c['cities'][r['hub']]['name']
+            name += via_label(r, c)
         elif r['direct_only']:
             name += ' · прямые'
         else:
@@ -238,10 +239,10 @@ def _group_summary(reports, c, group):
         header += '\n⚠️ Отчёт неполный: ' + '; '.join(
             escape(r.route['id'] + ' — ошибка API: ' + r.error) for r in errors)
     sections = []
-    for (destination, hub, changes), top in ordered:
+    for (destination, hub, changes, return_hub), top in ordered:
         name = c['cities'][c['origin']]['name'] + ' ↔ ' + c['cities'][destination]['name']
         if hub:
-            name += ' через ' + c['cities'][hub]['name']
+            name += via_label(dict(hub=hub, return_hub=return_hub), c)
         name += ' · ❗без пересадок' if changes == 0 else f' · ≤{changes} пересадки'
         title = '<b>' + escape(name) + '</b>'
         rows = []

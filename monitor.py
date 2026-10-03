@@ -31,7 +31,7 @@ def save_json(path, data):
 def format_trip(trip, c):
     r = trip['route']
     name = escape(c['cities'][r['destination']]['name'])
-    via = ' через ' + escape(c['cities'][r['hub']]['name']) if r.get('hub') else ''
+    via = escape(routes.via_label(r, c))
     ticket_type = 'Единый тариф RT' if trip.get('booking') else 'Отдельные билеты'
     lines = [f"✈️ Москва ↔ {name}{via}", f"<b>{trip['total']:g} ₽ туда-обратно</b> · {trip['stay']} дней во Вьетнаме",
              f"Порог: {r['max_total_price']:g} ₽. {ticket_type}; время местное."]
@@ -90,6 +90,7 @@ def main():
     client = aviasales.Client(token, c, months)
     trips, counts, reports = {}, {}, []
     failures = {}
+    hub_sources = []
     for route in c['routes']:
         if not route.get('enabled', True):
             continue
@@ -106,6 +107,8 @@ def main():
             reports.append(report)
             continue
         directions = routes.directional_paths(route, offers, c)
+        if route.get('hub'):
+            hub_sources.append((route, directions))
         report = reporting.RouteReport(route, directions)
         reports.append(report)
         count = 0
@@ -125,6 +128,20 @@ def main():
                      [len(v) for v in offers.values()], count)
         logging.info('%s: совместимых поездок %d; минимум RT %s', route['id'],
                      sum(report.roundtrip.counts), report.roundtrip.minimum)
+    if c.get('mixed_hubs', True):
+        for route, directions in routes.mixed_hub_directions(hub_sources):
+            report = reporting.RouteReport(route, ([], []))
+            count = 0
+            for trip in routes.build_trips(route, {}, c, apply_price_limit=False, directions=directions):
+                report.add_trip(trip)
+                if trip['total'] <= route['max_total_price']:
+                    trips[trip['key']] = trip
+                    count += 1
+            counts[route['id']] = count
+            if report.cheapest is not None:
+                reports.append(report)
+                logging.info('%s: совместимых поездок %d; минимум RT %s', route['id'],
+                             sum(report.roundtrip.counts), report.roundtrip.minimum)
     summary = reporting.summary_messages(reports, c)
     for index, message in enumerate(summary, 1):
         if args.dry_run:

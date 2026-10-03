@@ -503,6 +503,75 @@ class MonitorTests(unittest.TestCase):
         self.assertNotIn('30001 ₽', result)
         self.assertNotIn(' │ ', result)
 
+    def mixed_fixture(self):
+        selected = [next(r for r in self.c['routes'] if r['id'] == rid)
+                    for rid in ('ovb-cxr', 'han-cxr')]
+        offers = {edge: [] for r in selected for edge in routes.edges(r, 'MOW')}
+        for a, b, when, duration in (
+                ('MOW', 'OVB', '2027-03-01T06:00:00+03:00', 240),
+                ('OVB', 'CXR', '2027-03-01T22:00:00+07:00', 360),
+                ('CXR', 'HAN', '2027-03-12T08:00:00+07:00', 120),
+                ('HAN', 'MOW', '2027-03-12T20:00:00+07:00', 540)):
+            offers[a, b] = [self.leg(a, b, when, duration)]
+        return selected, offers
+
+    def test_mixed_hubs_work_without_any_same_hub_roundtrip(self):
+        selected, offers = self.mixed_fixture()
+        for r in selected:
+            self.assertEqual(list(routes.build_trips(r, offers, self.c)), [])
+        sources = [(r, routes.directional_paths(r, offers, self.c)) for r in selected]
+        combinations = list(routes.mixed_hub_directions(sources))
+        self.assertEqual(len(combinations), 1)
+        route, directions = combinations[0]
+        trip = next(routes.build_trips(route, offers, self.c, directions=directions))
+        self.assertEqual((trip['total'], trip['stay']), (20000, 10))
+        self.assertEqual([(x['origin'], x['destination']) for x in trip['legs']],
+                         [('MOW', 'OVB'), ('OVB', 'CXR'), ('CXR', 'HAN'), ('HAN', 'MOW')])
+        self.assertEqual(next(routes.build_trips(route, offers, self.c))['key'], trip['key'])
+        report = reporting.RouteReport(route, directions)
+        report.add_trip(trip)
+        text = '\n'.join(reporting.summary_messages([report], self.c))
+        self.assertIn('туда через Новосибирск, обратно через Ханой', text)
+        self.assertEqual(text.count('href='), 4)
+        self.assertIn('20000 ₽', text)
+
+    def test_mixed_hubs_retain_transfer_and_date_filters(self):
+        selected, original = self.mixed_fixture()
+        for case in ('extra_transfer_out', 'extra_transfer_back', 'short_connection', 'late_return', 'long_stay'):
+            c, offers = copy.deepcopy(self.c), copy.deepcopy(original)
+            if case.startswith('extra_transfer'):
+                edge = ('MOW', 'OVB') if case.endswith('out') else ('HAN', 'MOW')
+                offers[edge][0]['transfers'] = 1
+            elif case == 'short_connection':
+                offers['OVB', 'CXR'][0]['dep'] = offers['MOW', 'OVB'][0]['arr']
+            elif case == 'late_return':
+                c['return_end'] = date(2027, 3, 11)
+            else:
+                c['max_trip_days'] = 9
+                c['min_trip_days'] = 9
+            sources = [(r, routes.directional_paths(r, offers, c)) for r in selected]
+            trips = [trip for r, directions in routes.mixed_hub_directions(sources)
+                     for trip in routes.build_trips(r, offers, c, directions=directions)]
+            self.assertEqual(trips, [], case)
+
+    def test_monitor_mixed_hubs_setting_and_disabled_routes(self):
+        import os
+        selected, offers = self.mixed_fixture()
+        for enabled, disabled in ((True, False), (False, False), (True, True)):
+            c = copy.deepcopy(self.c)
+            c['routes'] = copy.deepcopy(selected)
+            c['mixed_hubs'] = enabled
+            c['routes'][1]['enabled'] = not disabled
+            with patch.dict(os.environ, {'TRAVELPAYOUTS_TOKEN': 'test'}), \
+                    patch('config.load', return_value=c), patch('sys.argv', ['monitor.py', '--dry-run']), \
+                    patch('aviasales.Client') as client, patch('builtins.print') as output:
+                client.return_value.fetch.side_effect = lambda a, b, direct: offers[a, b]
+                monitor.main()
+                text = '\n'.join(call.args[0] for call in output.call_args_list)
+                self.assertEqual('туда через Новосибирск, обратно через Ханой' in text, enabled and not disabled)
+                self.assertEqual(client.return_value.fetch.call_count, 4 if disabled else 8)
+                client.return_value.roundtrips.assert_not_called()
+
     def test_summary_sent_every_run_without_deals(self):
         import os
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {

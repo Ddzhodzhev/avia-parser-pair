@@ -8,6 +8,7 @@ max_trip_days: 15
 currency: rub
 market: ru
 max_alerts: 5
+mixed_hubs: true # Разные хабы туда/обратно из включённых маршрутов одного назначения.
 max_transfers_by_destination: {CXR: 1, DAD: 1, HKT: 1, BKK: 1} # На каждую сторону, включая стыковки отдельных билетов.
 min_connection_hours_outbound: 6
 min_connection_hours_return: 6
