@@ -48,6 +48,8 @@ def load(path=ROOT / 'config.yaml'):
         if len(city) != 3 or not city.isupper():
             raise ValueError(f'Неверный IATA-код: {city}')
         ZoneInfo(details['timezone'])
+        if 'summary_group' in details and (not isinstance(details['summary_group'], str) or not details['summary_group'].strip()):
+            raise ValueError('summary_group должен быть непустым названием группы')
     ids = set()
     for city, limit in c.get('max_transfers_by_destination', {}).items():
         if city not in c['cities'] or type(limit) is not int or limit < 0:
