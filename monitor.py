@@ -129,16 +129,20 @@ def main():
                      [len(v) for v in offers.values()], count)
         logging.info('%s: совместимых поездок %d; минимум RT %s', route['id'],
                      sum(report.roundtrip.counts), report.roundtrip.minimum)
-    for message in reporting.messages(reports, c, datetime.now(timezone.utc), include_summary=False):
+    for index, message in enumerate(reporting.messages(reports, c, datetime.now(timezone.utc), include_summary=False), 1):
         if args.dry_run:
             print(message)
         else:
+            logging.info('Telegram: отчёт, часть %d; текст %d, HTML %d символов',
+                         index, reporting.text_length(message), len(message))
             telegram.send_message(message)
     sent = notify(trips.values(), alerts, c, state_path, args.dry_run)
-    for message in reporting.summary_messages(reports, c):
+    for index, message in enumerate(reporting.summary_messages(reports, c), 1):
         if args.dry_run:
             print(message)
         else:
+            logging.info('Telegram: топ-5, часть %d; текст %d, HTML %d символов',
+                         index, reporting.text_length(message), len(message))
             telegram.send_message(message)
     if not args.dry_run:
         history_path = data_dir / 'history.json'
