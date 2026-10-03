@@ -26,6 +26,10 @@ def load(path=ROOT / 'config.yaml'):
         c[key] = date.fromisoformat(str(c[key]))
     if c['departure_start'] > c['departure_end']:
         raise ValueError('departure_start должен быть не позже departure_end')
+    if c.get('return_end'):
+        c['return_end'] = date.fromisoformat(str(c['return_end']))
+        if c['return_end'] < c['departure_start']:
+            raise ValueError('return_end раньше departure_start')
     for key in ('min_trip_days', 'max_trip_days', 'max_alerts', 'max_leg_hours',
                 'min_connection_hours_outbound', 'min_connection_hours_return',
                 'airport_change_min_hours', 'max_connection_hours'):
@@ -33,6 +37,8 @@ def load(path=ROOT / 'config.yaml'):
             raise ValueError(f'{key}: нужно положительное целое число')
     if c['min_trip_days'] > c['max_trip_days']:
         raise ValueError('min_trip_days > max_trip_days')
+    if c.get('return_end') and c['departure_start'] + timedelta(days=c['min_trip_days']) > c['return_end']:
+        raise ValueError('До return_end не помещается минимальная поездка')
     if max(c[k] for k in ('min_connection_hours_outbound', 'min_connection_hours_return',
                           'airport_change_min_hours')) > c['max_connection_hours']:
         raise ValueError('Минимальная пересадка больше максимальной')
@@ -61,6 +67,8 @@ def search_months(c):
     # Include travel to Vietnam, stay, and the return connection, including month rollover.
     end = c['departure_end'] + timedelta(days=c['max_trip_days'] + math.ceil(
         (3 * c['max_leg_hours'] + 2 * c['max_connection_hours']) / 24) + 2)
+    if c.get('return_end'):
+        end = min(end, c['return_end'])
     cursor = c['departure_start'].replace(day=1)
     months = []
     while cursor <= end:

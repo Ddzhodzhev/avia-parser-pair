@@ -10,6 +10,7 @@ import aviasales
 import config
 import routes
 import telegram
+import reporting
 
 
 def load_json(path, default):
@@ -90,22 +91,36 @@ def main():
     if not isinstance(alerts, dict) or any(type(v) not in (int, float) for v in alerts.values()):
         raise ValueError('Некорректный формат alerts.json')
     client = aviasales.Client(token, c, months)
-    trips, counts = {}, {}
+    trips, counts, reports = {}, {}, []
     for route in c['routes']:
         if not route.get('enabled', True):
             continue
         offers = {(a, b): client.fetch(a, b, route['direct_only']) for a, b in routes.edges(route, c['origin'])}
+        directions = routes.directional_paths(route, offers, c)
+        report = reporting.RouteReport(route, directions)
+        reports.append(report)
         count = 0
-        for trip in routes.build_trips(route, offers, c):
-            trips[trip['key']] = trip
-            count += 1
-        if not route.get('hub'):
-            for trip in routes.booked_trips(route, client.roundtrips(c['origin'], route['destination'], route['direct_only']), c):
+        for trip in routes.build_trips(route, offers, c, apply_price_limit=False, directions=directions):
+            report.add_trip(trip)
+            if trip['total'] <= route['max_total_price']:
                 trips[trip['key']] = trip
                 count += 1
+        if not route.get('hub'):
+            for trip in routes.booked_trips(route, client.roundtrips(c['origin'], route['destination'], route['direct_only']), c, apply_price_limit=False):
+                report.add_trip(trip)
+                if trip['total'] <= route['max_total_price']:
+                    trips[trip['key']] = trip
+                    count += 1
         counts[route['id']] = count
         logging.info('%s: предложений по плечам %s; выгодных поездок %d', route['id'],
                      [len(v) for v in offers.values()], count)
+        logging.info('%s: совместимых поездок %d; минимум RT %s', route['id'],
+                     sum(report.roundtrip.counts), report.roundtrip.minimum)
+    for message in reporting.messages(reports, c, datetime.now(timezone.utc)):
+        if args.dry_run:
+            print(message)
+        else:
+            telegram.send_message(message)
     sent = notify(trips.values(), alerts, c, state_path, args.dry_run)
     if not args.dry_run:
         history_path = data_dir / 'history.json'

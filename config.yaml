@@ -1,7 +1,8 @@
-# Даты вылета из Москвы включительно. Возврат может быть в мае.
+# Даты включительно. return_end — дата прилёта в Москву по местному времени.
 origin: MOW
 departure_start: '2027-03-01'
-departure_end: '2027-04-30'
+departure_end: '2027-04-28'
+return_end: '2027-04-28'
 min_trip_days: 10
 max_trip_days: 15
 currency: rub
@@ -30,6 +31,7 @@ cities:
   FRU: {name: Бишкек, timezone: Asia/Bishkek}
 routes:
   - {id: cxr-direct, destination: CXR, direct_only: true, max_total_price: 31000}
+  - {id: cxr-through, destination: CXR, direct_only: false, max_total_price: 31000}
   - {id: dad-through, destination: DAD, direct_only: false, max_total_price: 30000}
   - {id: han-cxr, destination: CXR, hub: HAN, direct_only: true, max_total_price: 32000}
   - {id: han-dad, destination: DAD, hub: HAN, direct_only: true, max_total_price: 32000}

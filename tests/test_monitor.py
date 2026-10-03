@@ -1,18 +1,22 @@
 import copy
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from unittest.mock import patch, Mock
 import aviasales
 import config
 import monitor
 import routes
+import reporting
 
 
 class MonitorTests(unittest.TestCase):
     def setUp(self):
         self.c = config.load()
+        # Legacy scenarios deliberately cover open-ended April departures / May returns.
+        self.c.pop('return_end', None)
+        self.c['departure_end'] = date(2027, 4, 30)
         self.route = next(r for r in self.c['routes'] if r['id'] == 'bkk-dad')
         self.now = datetime(2026, 10, 3, tzinfo=timezone.utc)
 
@@ -197,6 +201,64 @@ class MonitorTests(unittest.TestCase):
             monitor.main()
             send.assert_not_called()
             self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_return_deadline_uses_arrival_in_moscow(self):
+        offers = self.offers()
+        self.c['return_end'] = date(2027, 5, 11)
+        self.assertEqual(len(list(routes.build_trips(self.route, offers, self.c))), 1)
+        offers['BKK', 'MOW'][0]['arr'] = datetime.fromisoformat('2027-05-12T00:00:00+03:00')
+        self.assertEqual(list(routes.build_trips(self.route, offers, self.c)), [])
+        self.assertEqual(list(routes.booked_trips(self.c['routes'][0],
+            [(offers['MOW', 'BKK'][0], offers['BKK', 'MOW'][0])], self.c)), [])
+
+    def test_current_search_settings(self):
+        c = config.load()
+        self.assertEqual(c['return_end'], date(2027, 4, 28))
+        self.assertEqual(config.search_months(c), ['2027-03', '2027-04'])
+        self.assertTrue(any(r['destination'] == 'CXR' and not r.get('hub')
+                            and not r['direct_only'] for r in c['routes']))
+
+    def test_histogram_boundaries(self):
+        h = reporting.Histogram()
+        for price in (1, 5000, 5000.01, 30000, 35000, 40000, 45000, 50000, 50001):
+            h.add(price)
+        self.assertEqual(h.counts, [2, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1])
+        self.assertEqual(h.minimum, 1)
+
+    def test_report_includes_expensive_compatible_trips(self):
+        offers = self.offers()
+        for legs in offers.values():
+            legs[0]['price'] = 20000
+        self.assertEqual(list(routes.build_trips(self.route, offers, self.c)), [])
+        directions = routes.directional_paths(self.route, offers, self.c)
+        report = reporting.RouteReport(self.route, directions)
+        trips = list(routes.build_trips(self.route, offers, self.c, False, directions))
+        for trip in trips * 2:
+            report.add_trip(trip)
+        self.assertEqual(report.outbound.minimum, 40000)
+        self.assertEqual(report.inbound.minimum, 40000)
+        self.assertEqual(report.roundtrip.minimum, 80000)
+        self.assertEqual(sum(report.roundtrip.counts), 1)
+        chunks = reporting.messages([report] * 30, self.c, self.now)
+        self.assertGreater(len(chunks), 1)
+        self.assertTrue(all(len(s) <= 3800 for s in chunks))
+
+    def test_summary_sent_every_run_without_deals(self):
+        import os
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
+                'TRAVELPAYOUTS_TOKEN': 'test', 'TELEGRAM_BOT_TOKEN': 'test',
+                'TELEGRAM_CHAT_ID': '1', 'DATA_DIR': directory}), \
+                patch('sys.argv', ['monitor.py']), patch('aviasales.Client') as client, \
+                patch('telegram.send_message') as send:
+            client.return_value.fetch.return_value = []
+            client.return_value.roundtrips.return_value = []
+            monitor.main()
+            calls = send.call_count
+            self.assertGreater(calls, 0)
+            self.assertIn('Проверка цен', send.call_args_list[0].args[0])
+            monitor.main()
+            self.assertEqual(send.call_count, calls * 2)
+            self.assertFalse((Path(directory) / 'alerts.json').exists())
 
 
 if __name__ == '__main__':
