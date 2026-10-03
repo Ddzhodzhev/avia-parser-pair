@@ -225,22 +225,23 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(h.counts, [2, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1])
         self.assertEqual(h.minimum, 1)
 
-    def test_cxr_transfer_limit_both_sides_and_hubs(self):
-        r = next(r for r in self.c['routes'] if r['id'] == 'cxr-through')
-        out = self.leg('MOW', 'CXR', '2027-03-01T20:00:00+03:00', 600)
-        back = self.leg('CXR', 'MOW', '2027-03-12T12:00:00+07:00', 600)
-        out['transfers'] = back['transfers'] = 1
-        offers = {('MOW', 'CXR'): [out], ('CXR', 'MOW'): [back]}
-        self.assertEqual(len(list(routes.build_trips(r, offers, self.c))), 1)
-        self.assertEqual(len(list(routes.booked_trips(r, [(out, back)], self.c))), 1)
-        for leg in (out, back):
-            leg['transfers'] = 2
-            self.assertEqual(list(routes.build_trips(r, offers, self.c)), [])
-            self.assertEqual(list(routes.booked_trips(r, [(out, back)], self.c)), [])
-            leg['transfers'] = 1
-        self.assertFalse(routes.transfers_allowed((out, back), r, self.c))
-        out['transfers'] = back['transfers'] = 0
-        self.assertTrue(routes.transfers_allowed((out, back), r, self.c))
+    def test_transfer_limit_both_destinations_sides_and_hubs(self):
+        for destination, route_id in (('CXR', 'cxr-through'), ('DAD', 'dad-through')):
+            r = next(r for r in self.c['routes'] if r['id'] == route_id)
+            out = self.leg('MOW', destination, '2027-03-01T20:00:00+03:00', 600)
+            back = self.leg(destination, 'MOW', '2027-03-12T12:00:00+07:00', 600)
+            out['transfers'] = back['transfers'] = 1
+            offers = {('MOW', destination): [out], (destination, 'MOW'): [back]}
+            self.assertEqual(len(list(routes.build_trips(r, offers, self.c))), 1)
+            self.assertEqual(len(list(routes.booked_trips(r, [(out, back)], self.c))), 1)
+            for leg in (out, back):
+                leg['transfers'] = 2
+                self.assertEqual(list(routes.build_trips(r, offers, self.c)), [])
+                self.assertEqual(list(routes.booked_trips(r, [(out, back)], self.c)), [])
+                leg['transfers'] = 1
+            self.assertFalse(routes.transfers_allowed((out, back), r, self.c))
+            out['transfers'] = back['transfers'] = 0
+            self.assertTrue(routes.transfers_allowed((out, back), r, self.c))
 
     def test_compact_report_cheapest_links_and_zero_rows(self):
         report = reporting.RouteReport(self.route, routes.directional_paths(self.route, self.offers(), self.c))

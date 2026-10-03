@@ -8,7 +8,7 @@ max_trip_days: 15
 currency: rub
 market: ru
 max_alerts: 5
-max_transfers_by_destination: {CXR: 1} # На каждую сторону, включая стыковки отдельных билетов.
+max_transfers_by_destination: {CXR: 1, DAD: 1} # На каждую сторону, включая стыковки отдельных билетов.
 min_connection_hours_outbound: 6
 min_connection_hours_return: 6
 airport_change_min_hours: 12 # Также применяется, когда аэропорт неизвестен.
