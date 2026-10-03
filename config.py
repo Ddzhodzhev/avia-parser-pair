@@ -60,6 +60,8 @@ def load(path=ROOT / 'config.yaml'):
         ids.add(r['id'])
         if type(r.get('enabled', True)) is not bool or type(r['direct_only']) is not bool:
             raise ValueError('enabled и direct_only должны быть true/false')
+        if type(r.get('summary_variants', 1)) is not int or not 1 <= r.get('summary_variants', 1) <= 4:
+            raise ValueError('summary_variants: нужно целое число от 1 до 4')
         cities = [c['origin'], r['destination']] + ([r['hub']] if r.get('hub') else [])
         if len(set(cities)) != len(cities) or any(x not in c['cities'] for x in cities):
             raise ValueError(f"Неверные города маршрута {r['id']}")

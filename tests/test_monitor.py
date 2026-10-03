@@ -433,6 +433,45 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(result.count('56000 ₽'), 1)
         self.assertNotIn('✈️ Туда', result)
 
+    def test_priority_routes_keep_four_sorted_unique_variants(self):
+        for rid in ('cxr-through', 'hkt-through'):
+            r = next(r for r in self.c['routes'] if r['id'] == rid)
+            out = self.leg('MOW', r['destination'], '2027-03-01T20:00:00+03:00', 600)
+            back = self.leg(r['destination'], 'MOW', '2027-03-12T12:00:00+07:00', 600)
+            # Real fare links are long; the four rows should still stay together.
+            out['link'] = 'https://www.aviasales.ru/search/test?t=' + 'x' * 700
+            report = reporting.RouteReport(r, ([], []))
+            for i in reversed(range(7)):
+                report.add_trip(dict(route=r, key=str(i), total=60000+i, booking=True,
+                                     legs=(dict(out, transfers=1), dict(back, transfers=1))))
+            chunks = reporting.summary_messages([report, report], self.c)
+            self.assertEqual(len(chunks), 1)
+            result = chunks[0]
+            self.assertTrue(reporting.fits_message(result))
+            self.assertEqual(result.count('>Билет RT</a>'), 4)
+            for i in range(4):
+                self.assertEqual(result.count(f'{60000+i} ₽'), 1)
+            self.assertNotIn('60004 ₽', result)
+            self.assertLess(result.index('60000 ₽'), result.index('60003 ₽'))
+            self.assertEqual(result.count('≤1 пересадки'), 1)
+
+    def test_priority_long_links_split_only_between_complete_variants(self):
+        r = next(r for r in self.c['routes'] if r['id'] == 'hkt-through')
+        out = self.leg('MOW', 'HKT', '2027-03-01T20:00:00+03:00', 600)
+        back = self.leg('HKT', 'MOW', '2027-03-12T12:00:00+07:00', 600)
+        out['link'] = 'https://www.aviasales.ru/search/test?t=' + 'x' * 3000
+        report = reporting.RouteReport(r, ([], []))
+        for i in range(4):
+            report.add_trip(dict(route=r, key=str(i), total=60000+i, booking=True,
+                                 legs=(dict(out, transfers=1), dict(back, transfers=1))))
+        chunks = reporting.summary_messages([report], self.c)
+        self.assertGreater(len(chunks), 1)
+        for chunk in chunks:
+            self.assertTrue(reporting.fits_message(chunk))
+            self.assertIn('Москва ↔ Пхукет', chunk)
+            self.assertIn('>Билет RT</a>', chunk)
+        self.assertEqual(''.join(chunks).count('>Билет RT</a>'), 4)
+
     def test_summary_rt_fare_does_not_create_one_way_prices(self):
         trip = next(routes.build_trips(self.route, self.offers(), self.c))
         report = reporting.RouteReport(self.route, ([], []))

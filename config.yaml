@@ -34,7 +34,7 @@ cities:
   BSZ: {name: Бишкек, timezone: Asia/Bishkek}
 routes:
   - {id: cxr-direct, destination: CXR, direct_only: true, max_total_price: 31000}
-  - {id: cxr-through, destination: CXR, direct_only: false, max_total_price: 31000}
+  - {id: cxr-through, summary_variants: 4, destination: CXR, direct_only: false, max_total_price: 31000}
   - {id: dad-through, destination: DAD, direct_only: false, max_total_price: 30000}
   - {id: han-cxr, destination: CXR, hub: HAN, direct_only: true, max_total_price: 32000}
   - {id: han-dad, destination: DAD, hub: HAN, direct_only: true, max_total_price: 32000}
@@ -60,7 +60,7 @@ routes:
   - {id: fru-cxr, destination: CXR, hub: BSZ, direct_only: true, max_total_price: 33500}
   - {id: fru-dad, destination: DAD, hub: BSZ, direct_only: true, max_total_price: 33500}
   # Таиланд: те же ограничения; пороги только для статистики, не для топ-10.
-  - {id: hkt-through, destination: HKT, direct_only: false, max_total_price: 31000}
+  - {id: hkt-through, summary_variants: 4, destination: HKT, direct_only: false, max_total_price: 31000}
   - {id: ovb-hkt, destination: HKT, hub: OVB, direct_only: true, max_total_price: 31000}
   - {id: bkk-through, destination: BKK, direct_only: false, max_total_price: 31000}
   - {id: ovb-bkk, destination: BKK, hub: OVB, direct_only: true, max_total_price: 31000}
