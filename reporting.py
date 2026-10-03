@@ -1,9 +1,31 @@
 """Price distributions of observed itineraries, not seats or live availability."""
 from bisect import bisect_left
 from html import escape
+from html.parser import HTMLParser
 
 BOUNDS = list(range(5000, 50001, 5000))
 LABELS = ['≤5'] + [f'{n}–{n+5}' for n in range(5, 50, 5)] + ['>50']
+
+
+class _VisibleText(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.length = 0
+
+    def handle_data(self, data):
+        # UTF-16 units conservatively cover Telegram's entity offsets and emoji.
+        self.length += len(data.encode('utf-16-le')) // 2
+
+
+def text_length(html):
+    parser = _VisibleText()
+    parser.feed(html)
+    return parser.length
+
+
+def fold_details(title, summary, blocks):
+    details = '\n'.join(blocks).replace('<pre>', '').replace('</pre>', '')
+    return [title + ' · ' + summary, '<blockquote expandable>' + details + '</blockquote>']
 
 
 class Histogram:
@@ -60,7 +82,7 @@ class RouteReport:
         trip = self.cheapest
         if trip is None:
             blocks.append('Совместимого RT нет')
-            return blocks
+            return fold_details(title, 'RT нет', blocks[0].split('\n', 1)[1:] + blocks[1:])
         blocks.append(f"Лучший RT: <b>{trip['total']:g} ₽</b> · {trip['stay']} дней"
                       + (' · единый тариф' if trip.get('booking') else ' · отдельные билеты'))
         for index, leg in enumerate(trip['legs']):
@@ -76,7 +98,8 @@ class RouteReport:
             elif not leg['link']:
                 line += ' · ссылки нет в API'
             blocks.append(line)
-        return blocks
+        summary = f"<b>{trip['total']:g} ₽ RT</b> · {trip['legs'][0]['dep']:%d.%m}–{trip['legs'][-1]['arr']:%d.%m}"
+        return fold_details(title, summary, blocks[0].split('\n', 1)[1:] + blocks[1:])
 
     def render(self, c):
         return '\n'.join(self.blocks(c))
@@ -92,15 +115,25 @@ def messages(reports, c, now):
     if any(report.error for report in reports):
         header += '\n⚠️ Отчёт неполный: часть маршрутов не проверена.'
     chunks, current = [], header
+    empty = []
     for report in reports:
+        if not report.error and not any(sum(h.counts) for h in (report.outbound, report.inbound, report.roundtrip)):
+            empty.append(report.blocks(c)[0].replace(' — нет вариантов', ''))
+            continue
         blocks = report.blocks(c)
         # Prefer keeping a route together; split only between complete HTML blocks.
         text = '\n'.join(blocks)
-        groups = [text] if len(text) <= 3700 else blocks
+        groups = [text] if text_length(text) <= 3700 else blocks
         for block in groups:
-            if len(current) + len(block) + 2 > 3800:
+            if text_length(current) + text_length(block) + 2 > 3800:
                 chunks.append(current)
                 current = '<b>Цены · продолжение</b>'
             current += '\n\n' + block
+    if empty:
+        block = f'Нет вариантов: {len(empty)} маршрутов\n<blockquote expandable>' + '\n'.join(empty) + '</blockquote>'
+        if text_length(current) + text_length(block) + 2 > 3800:
+            chunks.append(current)
+            current = '<b>Цены · продолжение</b>'
+        current += '\n\n' + block
     chunks.append(current)
     return chunks

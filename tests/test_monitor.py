@@ -290,7 +290,7 @@ class MonitorTests(unittest.TestCase):
                 text = '\n'.join(call.args[0] for call in send.call_args_list)
                 self.assertIn('Отчёт неполный', text)
                 self.assertIn('ошибка API: HTTP 400', text)
-                self.assertIn('нет вариантов', text)
+                self.assertIn('Нет вариантов', text)
                 self.assertNotIn('sensitive response', text)
                 history = monitor.load_json(Path(directory) / 'history.json', [])
                 self.assertTrue(history[-1]['errors'])
@@ -312,7 +312,26 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(sum(report.roundtrip.counts), 1)
         chunks = reporting.messages([report] * 30, self.c, self.now)
         self.assertGreater(len(chunks), 1)
-        self.assertTrue(all(len(s) <= 3800 for s in chunks))
+        self.assertTrue(all(reporting.text_length(s) <= 3800 for s in chunks))
+
+    def test_folded_report_long_urls_do_not_force_extra_messages(self):
+        trip = next(routes.build_trips(self.route, self.offers(), self.c))
+        links = []
+        for i, leg in enumerate(trip['legs']):
+            leg['link'] = 'https://www.aviasales.ru/search/test?t=' + ('x' * 1500) + str(i)
+            links.append(leg['link'])
+        report = reporting.RouteReport(self.route, ([], []))
+        report.add_trip(trip)
+        chunks = reporting.messages([report] * 12, self.c, self.now)
+        self.assertLess(len(chunks), 6)
+        self.assertTrue(all(reporting.text_length(s) <= 3800 for s in chunks))
+        output = '\n'.join(chunks)
+        self.assertEqual(output.count('<blockquote expandable>'), 12)
+        self.assertEqual(output.count('</blockquote>'), 12)
+        self.assertNotIn('<pre>', output)
+        for link in links:
+            self.assertEqual(output.count(link), 12)
+        self.assertEqual(reporting.text_length('<b>🌍 &amp;</b>'), 4)
 
     def test_summary_sent_every_run_without_deals(self):
         import os
