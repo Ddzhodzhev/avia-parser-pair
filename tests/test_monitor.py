@@ -258,8 +258,8 @@ class MonitorTests(unittest.TestCase):
         messages = reporting.summary_messages([vietnam, thailand], self.c)
         vn = '\n'.join(m for m in messages if 'Вьетнам · топ-10' in m)
         th = '\n'.join(m for m in messages if 'Таиланд · топ-10' in m)
-        self.assertIn('<b>10004 ₽</b>', vn)
-        self.assertIn('<b>90004 ₽</b>', th)
+        self.assertIn('<b>10000 ₽</b>', vn)
+        self.assertIn('<b>90000 ₽</b>', th)
         self.assertNotIn('Пхукет', vn)
         self.assertNotIn('через Бангкок', th)
         thailand.error = 'HTTP 400'
@@ -402,7 +402,7 @@ class MonitorTests(unittest.TestCase):
         for link in links:
             self.assertEqual('\n'.join(chunks).count(link), 1)
 
-    def test_summary_splits_long_links_inside_top_five(self):
+    def test_summary_one_route_keeps_all_links_in_one_message(self):
         trip = next(routes.build_trips(self.route, self.offers(), self.c))
         for leg in trip['legs']:
             leg['link'] = 'https://www.aviasales.ru/search/test?t=' + 'x' * 1500
@@ -410,14 +410,14 @@ class MonitorTests(unittest.TestCase):
         for i in range(5):
             report.add_trip(dict(trip, key=str(i), total=20000 + i))
         chunks = reporting.summary_messages([report], self.c)
-        self.assertGreaterEqual(len(chunks), 5)
+        self.assertEqual(len(chunks), 1)
         self.assertTrue(all(reporting.fits_message(s) for s in chunks))
         output = '\n'.join(chunks)
-        self.assertEqual(output.count('href='), 20)
-        for i in range(5):
-            self.assertIn(f'<b>{20000+i} ₽</b>', output)
+        self.assertEqual(output.count('href='), 4)
+        self.assertIn('<b>20000 ₽</b>', output)
+        self.assertNotIn('20001 ₽', output)
 
-    def test_summary_keeps_five_unique_variants_per_route(self):
+    def test_summary_keeps_one_cheapest_variant_per_route(self):
         trip = next(routes.build_trips(self.route, self.offers(), self.c))
         reports = []
         for repeat in range(2):
@@ -426,8 +426,8 @@ class MonitorTests(unittest.TestCase):
                 report.add_trip(dict(trip, key=str(i), total=70000 - i * 1000))
             reports.append(report)
         result = '\n'.join(reporting.summary_messages(reports, self.c))
-        self.assertIn('<b>60000 ₽</b>', result)
-        self.assertNotIn('61000 ₽', result)
+        self.assertIn('<b>56000 ₽</b>', result)
+        self.assertNotIn('57000 ₽', result)
         self.assertEqual(result.count('через Бангкок'), 1)
         self.assertNotIn('11. <b>', result)
         self.assertEqual(result.count('56000 ₽'), 1)
@@ -440,7 +440,7 @@ class MonitorTests(unittest.TestCase):
         result = '\n'.join(reporting.summary_messages([report], self.c))
         self.assertEqual(result.count('Нет вариантов'), 0)
         self.assertEqual(result.count('href='), 1)
-        self.assertIn('>RT</a>', result)
+        self.assertIn('>Билет RT</a>', result)
 
     def test_grouping_preserves_direct_and_more_expensive_routes(self):
         r = next(r for r in self.c['routes'] if r['id'] == 'dad-through')
@@ -460,9 +460,9 @@ class MonitorTests(unittest.TestCase):
         self.assertIn('100000 ₽', result)
         self.assertIn('через Бангкок', result)
         self.assertIn('110000 ₽', result)
-        self.assertIn('30004 ₽', result)
-        self.assertNotIn('30005 ₽', result)
-        self.assertIn(' │ ', result)
+        self.assertIn('30000 ₽', result)
+        self.assertNotIn('30001 ₽', result)
+        self.assertNotIn(' │ ', result)
 
     def test_summary_sent_every_run_without_deals(self):
         import os
