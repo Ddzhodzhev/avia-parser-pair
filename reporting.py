@@ -24,6 +24,45 @@ def text_length(html):
     return parser.length
 
 
+# Conservative payload budget as well as the visible-text limit: hidden URLs
+# contribute to Telegram's entity-size limit (ENTITIES_TOO_LONG).
+HTML_BYTE_BUDGET = 8000
+
+
+def fits_message(text):
+    return text_length(text) <= 3800 and len(text.encode('utf-8')) <= HTML_BYTE_BUDGET
+
+
+def pack_sections(header, sections, continuation):
+    chunks, current = [], header
+    def append(block):
+        nonlocal current
+        if not fits_message(current + '\n\n' + block):
+            chunks.append(current)
+            current = continuation
+        if not fits_message(current + '\n\n' + block):
+            raise ValueError('Один блок отчёта превышает безопасный размер Telegram')
+        current += '\n\n' + block
+
+    for section in sections:
+        combined = '\n'.join(section)
+        if fits_message(continuation + '\n\n' + combined):
+            append(combined)
+            continue
+        for block in section:
+            if fits_message(continuation + '\n\n' + block):
+                append(block)
+                continue
+            # Split oversized expandable quotes without breaking HTML or URLs.
+            opening, closing = '<blockquote expandable>', '</blockquote>'
+            quoted = block.startswith(opening) and block.endswith(closing)
+            content = block[len(opening):-len(closing)] if quoted else block
+            for line in content.split('\n'):
+                append(opening + line + closing if quoted else line)
+    chunks.append(current)
+    return chunks
+
+
 def fold_details(title, summary, blocks):
     details = '\n'.join(blocks).replace('<pre>', '').replace('</pre>', '')
     return [title + ' · ' + summary, '<blockquote expandable>' + details + '</blockquote>']
@@ -135,28 +174,16 @@ def messages(reports, c, now, include_summary=True):
               'Цены из кеша; время местное. RT = туда-обратно.')
     if any(report.error for report in reports):
         header += '\n⚠️ Отчёт неполный: часть маршрутов не проверена.'
-    chunks, current = [], header
-    empty = []
+    sections, empty = [], []
     for report in reports:
         if not report.error and not any(sum(h.counts) for h in (report.outbound, report.inbound, report.roundtrip)):
             empty.append(report.blocks(c)[0].replace(' — нет вариантов', ''))
-            continue
-        blocks = report.blocks(c)
-        # Prefer keeping a route together; split only between complete HTML blocks.
-        text = '\n'.join(blocks)
-        groups = [text] if text_length(text) <= 3700 else blocks
-        for block in groups:
-            if text_length(current) + text_length(block) + 2 > 3800:
-                chunks.append(current)
-                current = '<b>Цены · продолжение</b>'
-            current += '\n\n' + block
+        else:
+            sections.append(report.blocks(c))
     if empty:
-        block = f'Нет вариантов: {len(empty)} маршрутов\n<blockquote expandable>' + '\n'.join(empty) + '</blockquote>'
-        if text_length(current) + text_length(block) + 2 > 3800:
-            chunks.append(current)
-            current = '<b>Цены · продолжение</b>'
-        current += '\n\n' + block
-    chunks.append(current)
+        sections.append([f'Нет вариантов: {len(empty)} маршрутов',
+                         '<blockquote expandable>' + '\n'.join(empty) + '</blockquote>'])
+    chunks = pack_sections(header, sections, '<b>Цены · продолжение</b>')
     if include_summary:
         chunks.extend(summary_messages(reports, c))
     return chunks
@@ -173,12 +200,12 @@ def summary_messages(reports, c):
     header = '<b>🏆 Топ-5 по цене</b>\nТуда и обратно — отдельные подборки; пара не гарантирована.'
     if any(r.error for r in reports):
         header += '\n⚠️ Только успешно проверенные маршруты.'
-    chunks, current = [], header
+    sections = []
     for index, title in enumerate(('✈️ Туда', '🏠 Обратно', '🔁 Туда-обратно')):
-        section = f'<b>{title}</b>'
+        heading = f'<b>{title}</b>'
         items = tops[index].ordered()
         if not items:
-            section += '\nНет вариантов'
+            sections.append([heading, 'Нет вариантов'])
         for rank, item in enumerate(items, 1):
             legs, route = item['legs'], item['route']
             destination = c['cities'][route['destination']]['name']
@@ -189,7 +216,7 @@ def summary_messages(reports, c):
                 transfers = max(leg['transfers'] for leg in legs)
                 name += ' · прямой' if transfers == 0 else f' · пересадок ≤{transfers}'
             dates = f'{legs[0]["dep"]:%d.%m}–{legs[-1]["arr"]:%d.%m}'
-            section += f'\n{rank}. <b>{item["total"]:g} ₽</b> · {escape(name)}\n{dates}'
+            section = f'{rank}. <b>{item["total"]:g} ₽</b> · {escape(name)}\n{dates}'
             if index == 2:
                 section += f' · {item["stay"]} дн.'
             links = []
@@ -199,9 +226,5 @@ def summary_messages(reports, c):
                 label = 'Билет RT' if item.get('booking') else f'{leg["origin_airport"] or leg["origin"]}→{leg["destination_airport"] or leg["destination"]} {leg["dep"]:%d.%m}'
                 links.append(f'<a href="{escape(leg["link"], quote=True)}">{escape(label)}</a>' if leg['link'] else escape(label) + ' (нет ссылки)')
             section += '\n' + ' · '.join(links)
-        if text_length(current) + text_length(section) + 2 > 3800:
-            chunks.append(current)
-            current = '<b>🏆 Топ-5 · продолжение</b>'
-        current += '\n\n' + section
-    chunks.append(current)
-    return chunks
+            sections.append([heading, section])
+    return pack_sections(header, sections, '<b>🏆 Топ-5 · продолжение</b>')

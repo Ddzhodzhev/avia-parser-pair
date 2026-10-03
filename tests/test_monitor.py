@@ -314,7 +314,7 @@ class MonitorTests(unittest.TestCase):
         self.assertGreater(len(chunks), 1)
         self.assertTrue(all(reporting.text_length(s) <= 3800 for s in chunks))
 
-    def test_folded_report_long_urls_do_not_force_extra_messages(self):
+    def test_folded_report_respects_hidden_url_budget(self):
         trip = next(routes.build_trips(self.route, self.offers(), self.c))
         links = []
         for i, leg in enumerate(trip['legs']):
@@ -323,7 +323,8 @@ class MonitorTests(unittest.TestCase):
         report = reporting.RouteReport(self.route, ([], []))
         report.add_trip(trip)
         chunks = reporting.messages([report] * 12, self.c, self.now)
-        self.assertLess(len(chunks), 6)
+        self.assertGreater(len(chunks), 6)
+        self.assertTrue(all(reporting.fits_message(s) for s in chunks))
         self.assertTrue(all(reporting.text_length(s) <= 3800 for s in chunks))
         output = '\n'.join(chunks)
         self.assertEqual(output.count('<blockquote expandable>'), 12)
@@ -340,6 +341,32 @@ class MonitorTests(unittest.TestCase):
         top.add('0', {'total': 90})
         top.add('1', {'total': 900})
         self.assertEqual([x['total'] for x in top.ordered()], [90, 101, 102, 103, 104])
+
+    def test_oversized_quote_splits_without_breaking_links(self):
+        links = [f'<a href="https://example.com/{i}?q={"x" * 3500}">Билет {i}</a>' for i in range(4)]
+        quote = '<blockquote expandable>' + '\n'.join(links) + '</blockquote>'
+        chunks = reporting.pack_sections('Отчёт', [['Маршрут', quote]], 'Продолжение')
+        self.assertGreater(len(chunks), 1)
+        self.assertTrue(all(reporting.fits_message(s) for s in chunks))
+        for chunk in chunks:
+            self.assertEqual(chunk.count('<blockquote expandable>'), chunk.count('</blockquote>'))
+        for link in links:
+            self.assertEqual('\n'.join(chunks).count(link), 1)
+
+    def test_summary_splits_long_links_inside_top_five(self):
+        trip = next(routes.build_trips(self.route, self.offers(), self.c))
+        for leg in trip['legs']:
+            leg['link'] = 'https://www.aviasales.ru/search/test?t=' + 'x' * 1500
+        report = reporting.RouteReport(self.route, ([], []))
+        for i in range(5):
+            report.add_trip(dict(trip, key=str(i), total=20000 + i))
+        chunks = reporting.summary_messages([report], self.c)
+        self.assertGreaterEqual(len(chunks), 5)
+        self.assertTrue(all(reporting.fits_message(s) for s in chunks))
+        output = '\n'.join(chunks)
+        self.assertEqual(output.count('href='), 20)
+        for i in range(5):
+            self.assertIn(f'{i+1}. <b>{20000+i} ₽</b>', output)
 
     def test_summary_has_three_global_top_fives(self):
         trip = next(routes.build_trips(self.route, self.offers(), self.c))
