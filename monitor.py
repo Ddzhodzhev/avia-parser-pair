@@ -87,10 +87,6 @@ def main():
     if not args.dry_run and not all(os.environ.get(k, '').strip() for k in ('TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID')):
         raise ValueError('Нужны секреты Telegram или --dry-run')
     data_dir = Path(os.environ.get('DATA_DIR', str(config.ROOT / 'data')))
-    state_path = data_dir / 'alerts.json'
-    alerts = load_json(state_path, {})
-    if not isinstance(alerts, dict) or any(type(v) not in (int, float) for v in alerts.values()):
-        raise ValueError('Некорректный формат alerts.json')
     client = aviasales.Client(token, c, months)
     trips, counts, reports = {}, {}, []
     failures = {}
@@ -129,19 +125,12 @@ def main():
                      [len(v) for v in offers.values()], count)
         logging.info('%s: совместимых поездок %d; минимум RT %s', route['id'],
                      sum(report.roundtrip.counts), report.roundtrip.minimum)
-    for index, message in enumerate(reporting.messages(reports, c, datetime.now(timezone.utc), include_summary=False), 1):
+    summary = reporting.summary_messages(reports, c)
+    for index, message in enumerate(summary, 1):
         if args.dry_run:
             print(message)
         else:
-            logging.info('Telegram: отчёт, часть %d; текст %d, HTML %d символов',
-                         index, reporting.text_length(message), len(message))
-            telegram.send_message(message)
-    sent = notify(trips.values(), alerts, c, state_path, args.dry_run)
-    for index, message in enumerate(reporting.summary_messages(reports, c), 1):
-        if args.dry_run:
-            print(message)
-        else:
-            logging.info('Telegram: топ-5, часть %d; текст %d, HTML %d символов',
+            logging.info('Telegram: топ-10, часть %d; текст %d, HTML %d символов',
                          index, reporting.text_length(message), len(message))
             telegram.send_message(message)
     if not args.dry_run:
@@ -149,10 +138,10 @@ def main():
         history = load_json(history_path, [])
         if not isinstance(history, list):
             raise ValueError('Некорректный формат history.json')
-        history.append(dict(at=datetime.now(timezone.utc).isoformat(), routes=counts, errors=failures, notified=sent,
+        history.append(dict(at=datetime.now(timezone.utc).isoformat(), routes=counts, errors=failures, summary_parts=len(summary),
                             cheapest=min((t['total'] for t in trips.values()), default=None)))
         save_json(history_path, history[-1000:])
-    logging.info('Выгодных полных поездок: %d; уведомлений: %d', len(trips), sent)
+    logging.info('Выгодных полных поездок: %d; частей итогового отчёта: %d', len(trips), len(summary))
     if failures:
         raise RuntimeError(f'Отчёт неполный: ошибок маршрутов {len(failures)}; доступные результаты отправлены')
 

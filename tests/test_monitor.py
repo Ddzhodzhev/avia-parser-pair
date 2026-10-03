@@ -213,10 +213,59 @@ class MonitorTests(unittest.TestCase):
 
     def test_current_search_settings(self):
         c = config.load()
-        self.assertEqual(c['return_end'], date(2027, 4, 28))
-        self.assertEqual(config.search_months(c), ['2027-03', '2027-04'])
+        self.assertEqual(c['return_end'], date(2027, 5, 31))
+        self.assertEqual(config.search_months(c), ['2027-03', '2027-04', '2027-05'])
         self.assertTrue(any(r['destination'] == 'CXR' and not r.get('hub')
                             and not r['direct_only'] for r in c['routes']))
+        r = next(r for r in c['routes'] if r['id'] == 'ovb-cxr')
+        self.assertEqual(routes.edges(r, 'MOW'), [('MOW', 'OVB'), ('OVB', 'CXR'), ('CXR', 'OVB'), ('OVB', 'MOW')])
+
+    def test_may_trip_and_return_deadline(self):
+        c = config.load()
+        r = next(r for r in c['routes'] if r['id'] == 'cxr-through')
+        out = self.leg('MOW', 'CXR', '2027-05-20T20:00:00+03:00', 600)
+        back = self.leg('CXR', 'MOW', '2027-05-31T10:00:00+07:00', 600)
+        offers = {('MOW', 'CXR'): [out], ('CXR', 'MOW'): [back]}
+        self.assertEqual(len(list(routes.build_trips(r, offers, c))), 1)
+        back['arr'] = datetime.fromisoformat('2027-06-01T00:00:00+03:00')
+        self.assertEqual(list(routes.build_trips(r, offers, c)), [])
+
+    def test_thailand_routes_and_novosibirsk_connection(self):
+        c = config.load()
+        for dest in ('HKT', 'BKK'):
+            selected = [r for r in c['routes'] if r['destination'] == dest]
+            self.assertEqual(len(selected), 2)
+            self.assertEqual(c['max_transfers_by_destination'][dest], 1)
+            r = next(r for r in selected if r.get('hub') == 'OVB')
+            offers = {
+                ('MOW', 'OVB'): [self.leg('MOW', 'OVB', '2027-05-01T10:00:00+03:00', 240)],
+                ('OVB', dest): [self.leg('OVB', dest, '2027-05-02T08:00:00+07:00', 420)],
+                (dest, 'OVB'): [self.leg(dest, 'OVB', '2027-05-12T08:00:00+07:00', 420)],
+                ('OVB', 'MOW'): [self.leg('OVB', 'MOW', '2027-05-12T22:00:00+07:00', 240)],
+            }
+            trip = next(routes.build_trips(r, offers, c))
+            self.assertEqual(trip['stay'], 10)
+            self.assertEqual(len(trip['legs']), 4)
+
+    def test_country_top_tens_are_independent_and_hub_does_not_set_country(self):
+        trip = next(routes.build_trips(self.route, self.offers(), self.c))
+        vietnam = reporting.RouteReport(self.route, ([], []))  # Vietnam via Bangkok.
+        thai_route = next(r for r in self.c['routes'] if r['id'] == 'hkt-through')
+        thailand = reporting.RouteReport(thai_route, ([], []))
+        for i in range(12):
+            vietnam.add_trip(dict(trip, key=f'v{i}', total=10000+i))
+            thailand.add_trip(dict(trip, key=f't{i}', route=thai_route, total=90000+i))
+        messages = reporting.summary_messages([vietnam, thailand], self.c)
+        vn = '\n'.join(m for m in messages if 'Вьетнам · топ-10' in m)
+        th = '\n'.join(m for m in messages if 'Таиланд · топ-10' in m)
+        self.assertIn('10. <b>10009 ₽</b>', vn)
+        self.assertIn('10. <b>90009 ₽</b>', th)
+        self.assertNotIn('Пхукет', vn)
+        self.assertNotIn('через Бангкок', th)
+        thailand.error = 'HTTP 400'
+        messages = reporting.summary_messages([vietnam, thailand], self.c)
+        self.assertNotIn('Отчёт неполный', messages[0])
+        self.assertIn('Отчёт неполный', messages[-1])
 
     def test_histogram_boundaries(self):
         h = reporting.Histogram()
@@ -226,7 +275,7 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(h.minimum, 1)
 
     def test_transfer_limit_both_destinations_sides_and_hubs(self):
-        for destination, route_id in (('CXR', 'cxr-through'), ('DAD', 'dad-through')):
+        for destination, route_id in (('CXR', 'cxr-through'), ('DAD', 'dad-through'), ('HKT', 'hkt-through'), ('BKK', 'bkk-through')):
             r = next(r for r in self.c['routes'] if r['id'] == route_id)
             out = self.leg('MOW', destination, '2027-03-01T20:00:00+03:00', 600)
             back = self.leg(destination, 'MOW', '2027-03-12T12:00:00+07:00', 600)
@@ -335,7 +384,7 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(reporting.text_length('<b>🌍 &amp;</b>'), 4)
 
     def test_top_five_sorts_deduplicates_and_updates_prices(self):
-        top = reporting.TopFive()
+        top = reporting.TopOffers()
         for i in range(10):
             top.add(str(i), {'total': 100 + i})
         top.add('0', {'total': 90})
@@ -368,31 +417,28 @@ class MonitorTests(unittest.TestCase):
         for i in range(5):
             self.assertIn(f'{i+1}. <b>{20000+i} ₽</b>', output)
 
-    def test_summary_has_three_global_top_fives(self):
+    def test_summary_has_ten_unique_roundtrips_from_same_route(self):
         trip = next(routes.build_trips(self.route, self.offers(), self.c))
-        directions = routes.directional_paths(self.route, self.offers(), self.c)
         reports = []
         for repeat in range(2):
-            report = reporting.RouteReport(self.route, directions)
-            for i in range(8):
+            report = reporting.RouteReport(self.route, ([], []))
+            for i in range(15):
                 report.add_trip(dict(trip, key=str(i), total=70000 - i * 1000))
             reports.append(report)
         result = '\n'.join(reporting.summary_messages(reports, self.c))
-        self.assertIn('✈️ Туда', result)
-        self.assertIn('🏠 Обратно', result)
-        self.assertIn('🔁 Туда-обратно', result)
-        self.assertIn('5. <b>67000 ₽</b>', result)
-        self.assertNotIn('68000 ₽', result)
-        self.assertEqual(result.count('1. <b>'), 3)
-        self.assertNotIn('6. <b>', result)
-        self.assertEqual(result.count('63000 ₽'), 1)
+        self.assertIn('10. <b>65000 ₽</b>', result)
+        self.assertNotIn('66000 ₽', result)
+        self.assertEqual(result.count('1. <b>'), 1)
+        self.assertNotIn('11. <b>', result)
+        self.assertEqual(result.count('56000 ₽'), 1)
+        self.assertNotIn('✈️ Туда', result)
 
     def test_summary_rt_fare_does_not_create_one_way_prices(self):
         trip = next(routes.build_trips(self.route, self.offers(), self.c))
         report = reporting.RouteReport(self.route, ([], []))
         report.add_trip(dict(trip, booking=True, legs=(trip['legs'][0], trip['legs'][-1])))
         result = '\n'.join(reporting.summary_messages([report], self.c))
-        self.assertEqual(result.count('Нет вариантов'), 2)
+        self.assertEqual(result.count('Нет вариантов'), 0)
         self.assertEqual(result.count('href='), 1)
         self.assertIn('Билет RT', result)
 
@@ -408,7 +454,7 @@ class MonitorTests(unittest.TestCase):
             monitor.main()
             calls = send.call_count
             self.assertGreater(calls, 0)
-            self.assertIn('Проверка цен', send.call_args_list[0].args[0])
+            self.assertIn('топ-10', send.call_args_list[0].args[0])
             monitor.main()
             self.assertEqual(send.call_count, calls * 2)
             self.assertFalse((Path(directory) / 'alerts.json').exists())

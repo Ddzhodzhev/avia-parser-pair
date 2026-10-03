@@ -1,14 +1,14 @@
 # Даты включительно. return_end — дата прилёта в Москву по местному времени.
 origin: MOW
 departure_start: '2027-03-01'
-departure_end: '2027-04-28'
-return_end: '2027-04-28'
+departure_end: '2027-05-31'
+return_end: '2027-05-31'
 min_trip_days: 10
 max_trip_days: 15
 currency: rub
 market: ru
 max_alerts: 5
-max_transfers_by_destination: {CXR: 1, DAD: 1} # На каждую сторону, включая стыковки отдельных билетов.
+max_transfers_by_destination: {CXR: 1, DAD: 1, HKT: 1, BKK: 1} # На каждую сторону, включая стыковки отдельных билетов.
 min_connection_hours_outbound: 6
 min_connection_hours_return: 6
 airport_change_min_hours: 12 # Также применяется, когда аэропорт неизвестен.
@@ -16,10 +16,12 @@ max_connection_hours: 48
 max_leg_hours: 36 # Максимальная длительность одного билета, включая его пересадки.
 cities:
   MOW: {name: Москва, timezone: Europe/Moscow}
-  CXR: {name: Нячанг, timezone: Asia/Ho_Chi_Minh}
-  DAD: {name: Дананг, timezone: Asia/Ho_Chi_Minh}
+  CXR: {name: Нячанг, timezone: Asia/Ho_Chi_Minh, summary_group: Вьетнам}
+  DAD: {name: Дананг, timezone: Asia/Ho_Chi_Minh, summary_group: Вьетнам}
   HAN: {name: Ханой, timezone: Asia/Ho_Chi_Minh}
-  BKK: {name: Бангкок, timezone: Asia/Bangkok}
+  BKK: {name: Бангкок, timezone: Asia/Bangkok, summary_group: Таиланд}
+  HKT: {name: Пхукет, timezone: Asia/Bangkok, summary_group: Таиланд}
+  OVB: {name: Новосибирск, timezone: Asia/Novosibirsk}
   ALA: {name: Алматы, timezone: Asia/Almaty}
   TAS: {name: Ташкент, timezone: Asia/Tashkent}
   CAN: {name: Гуанчжоу, timezone: Asia/Shanghai}
@@ -38,6 +40,7 @@ routes:
   - {id: han-dad, destination: DAD, hub: HAN, direct_only: true, max_total_price: 32000}
   - {id: bkk-cxr, destination: CXR, hub: BKK, direct_only: true, max_total_price: 33500}
   - {id: bkk-dad, destination: DAD, hub: BKK, direct_only: true, max_total_price: 33500}
+  - {id: ovb-cxr, destination: CXR, hub: OVB, direct_only: true, max_total_price: 31000}
   - {id: ala-cxr, destination: CXR, hub: ALA, direct_only: true, max_total_price: 31500}
   - {id: tas-cxr, destination: CXR, hub: TAS, direct_only: true, max_total_price: 32000}
   - {id: can-cxr, destination: CXR, hub: CAN, direct_only: true, max_total_price: 33500}
@@ -56,3 +59,8 @@ routes:
   - {id: sin-dad, destination: DAD, hub: SIN, direct_only: true, max_total_price: 33500}
   - {id: fru-cxr, destination: CXR, hub: BSZ, direct_only: true, max_total_price: 33500}
   - {id: fru-dad, destination: DAD, hub: BSZ, direct_only: true, max_total_price: 33500}
+  # Таиланд: те же ограничения; пороги только для статистики, не для топ-10.
+  - {id: hkt-through, destination: HKT, direct_only: false, max_total_price: 31000}
+  - {id: ovb-hkt, destination: HKT, hub: OVB, direct_only: true, max_total_price: 31000}
+  - {id: bkk-through, destination: BKK, direct_only: false, max_total_price: 31000}
+  - {id: ovb-bkk, destination: BKK, hub: OVB, direct_only: true, max_total_price: 31000}
