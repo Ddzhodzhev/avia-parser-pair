@@ -12,6 +12,7 @@ import routes
 import telegram
 import requests
 import reporting
+import daily
 
 
 def load_json(path, default):
@@ -73,6 +74,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=Path, default=config.ROOT / 'config.yaml')
     parser.add_argument('--check-config', action='store_true')
+    parser.add_argument('--daily-summary', action='store_true', help='Отправить итог за вчера по МСК без запроса цен')
     parser.add_argument('--dry-run', action='store_true', help='Запросить API, печатать результаты без отправки и записи состояния')
     args = parser.parse_args()
     config.load_dotenv()
@@ -81,12 +83,19 @@ def main():
     if args.check_config:
         print(f"Конфиг корректен. Вылеты: {c['departure_start']} — {c['departure_end']}; месяцы API: {', '.join(months)}")
         return
-    token = os.environ.get('TRAVELPAYOUTS_TOKEN', '').strip()
-    if not token:
-        raise ValueError('Задайте TRAVELPAYOUTS_TOKEN в .env или GitHub Secrets')
     if not args.dry_run and not all(os.environ.get(k, '').strip() for k in ('TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID')):
         raise ValueError('Нужны секреты Telegram или --dry-run')
     data_dir = Path(os.environ.get('DATA_DIR', str(config.ROOT / 'data')))
+    daily_path = data_dir / 'daily.json'
+    if args.daily_summary:
+        daily.send_yesterday(load_json(daily_path, {}), c, datetime.now(timezone.utc),
+                             print if args.dry_run else telegram.send_message,
+                             lambda state: save_json(daily_path, state), args.dry_run)
+        return
+    token = os.environ.get('TRAVELPAYOUTS_TOKEN', '').strip()
+    if not token:
+        raise ValueError('Задайте TRAVELPAYOUTS_TOKEN в .env или GitHub Secrets')
+    observed_at = datetime.now(timezone.utc)
     client = aviasales.Client(token, c, months)
     trips, counts, reports = {}, {}, []
     failures = {}
@@ -142,6 +151,10 @@ def main():
                 reports.append(report)
                 logging.info('%s: совместимых поездок %d; минимум RT %s', route['id'],
                              sum(report.roundtrip.counts), report.roundtrip.minimum)
+    if not args.dry_run:
+        daily_state = load_json(daily_path, {})
+        daily.record(daily_state, reports, c, observed_at)
+        save_json(daily_path, daily_state)
     summary = reporting.summary_messages(reports, c)
     for index, message in enumerate(summary, 1):
         if args.dry_run:
