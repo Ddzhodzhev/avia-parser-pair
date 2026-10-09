@@ -126,7 +126,7 @@
       "sent": true
     },
     "2026-10-09": {
-      "runs": 3,
+      "runs": 4,
       "partial": false,
       "best": {
         "CXR": {
@@ -136,10 +136,10 @@
           "observed": "00:02"
         },
         "HKT": {
-          "total": 60615.0,
-          "key": "3b44f6e174b2d7624bbc0bfc876151d64024ad3b4ef61d3020dd06d4a3cf8fcf",
-          "block": "<b>Москва ↔ Пхукет · ≤1 пересадки</b>\n12.05–27.05 · <b>60615 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW1205HKT27051?t=EY18101439001810210500000870SVOAUHHKT18113880001811423400000830HKTAUHSVO_70f2c37ec214134dc4030560d17c67fc_61194&amp;search_date=06102026&amp;expected_price_uuid=01a1103d-5827-8050-ade1-585338b5af71&amp;static_fare_key=TY%7CP0%7CH1%7CL0%7CCH0%7CR0%7CTBC0&amp;itinerary_key=rQePdrV2FD3fjlHJ62GcJg&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=60615\">Билет RT</a>",
-          "observed": "00:02"
+          "total": 60481.0,
+          "key": "d54e75b2e954d636f1645673eb4541f6c0e6571ff3e76a2cac17ca3c2e999217",
+          "block": "<b>Москва ↔ Пхукет · ≤1 пересадки</b>\n03.03–17.03 · <b>60481 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW0303HKT1?t=C618041028001804162500000755VKOTASHKT_11d58de67748db89c5fd6967813d8a7e_30857&amp;search_date=09102026&amp;expected_price_uuid=01a1214f-3d49-8030-25d3-b9548da213fc&amp;static_fare_key=TY%7CP1%7CH0%7CL0%7CCH0%7CR0%7CTBC0&amp;itinerary_key=y4vyPa2c1Q-Sw9BNBlzgqg&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=30984\">VKO→HKT</a> / <a href=\"https://www.aviasales.ru/search/HKT1703MOW1?t=HY18052665001805313300001020HKTTASVKO_e9a01d84b96ed7bd96e14005e60d4a93_29497&amp;search_date=09102026&amp;expected_price_uuid=01a12220-fccf-8030-280c-4816813d4c34&amp;static_fare_key=TY%7CP0%7CH1%7CL0%7CCH0%7CR0%7CTBC0&amp;itinerary_key=AwrMC7p-IjTMZCZb5ZwvGg&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=29497\">HKT→VKO</a>",
+          "observed": "23:34"
         }
       }
     }
