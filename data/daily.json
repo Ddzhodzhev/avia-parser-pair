@@ -147,6 +147,24 @@
       ],
       "sent_parts": 1,
       "sent": true
+    },
+    "2026-10-10": {
+      "runs": 1,
+      "partial": false,
+      "best": {
+        "CXR": {
+          "total": 65912.0,
+          "key": "53658cbf79553a732e19177a9e7e4adfa98d3d6f5c37704cf9f25ad1878afdfd",
+          "block": "<b>Москва ↔ Нячанг · ≤1 пересадки</b>\n08.03–22.03 · <b>65912 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW0803CXR22031?t=VN18045234001804604400001110SVOHANCXR18057045001805809800001995CXRHANSVO_148c74612f86c34e940b75344f2195e5_65913&amp;search_date=09102026&amp;expected_price_uuid=01a1224a-c2a3-8030-e128-53866221baca&amp;static_fare_key=TY%7CP1_JW%7CH1%7CL1_1_23%7CCH1%7CR1%7CTBC1&amp;itinerary_key=l9YSjLVHYM61nG76nLJzpQ&amp;origin_airports=1&amp;destination_airports=0&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=65912\">Билет RT</a>",
+          "observed": "07:31"
+        },
+        "HKT": {
+          "total": 60181.0,
+          "key": "d54e75b2e954d636f1645673eb4541f6c0e6571ff3e76a2cac17ca3c2e999217",
+          "block": "<b>Москва ↔ Пхукет · ≤1 пересадки</b>\n03.03–17.03 · <b>60181 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW0303HKT1?t=C618041028001804162500000755VKOTASHKT_11d58de67748db89c5fd6967813d8a7e_30685&amp;search_date=09102026&amp;expected_price_uuid=01a122c0-6e2e-8031-2278-f4459acae04a&amp;static_fare_key=TY%7CP1%7CH0%7CL0%7CCH0%7CR0%7CTBC0&amp;itinerary_key=y4vyPa2c1Q-Sw9BNBlzgqg&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=30685\">VKO→HKT</a> / <a href=\"https://www.aviasales.ru/search/HKT1703MOW1?t=HY18052665001805313300001020HKTTASVKO_e9a01d84b96ed7bd96e14005e60d4a93_29497&amp;search_date=09102026&amp;expected_price_uuid=01a12220-fccf-8030-280c-4816813d4c34&amp;static_fare_key=TY%7CP0%7CH1%7CL0%7CCH0%7CR0%7CTBC0&amp;itinerary_key=AwrMC7p-IjTMZCZb5ZwvGg&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=29496\">HKT→VKO</a>",
+          "observed": "07:31"
+        }
+      }
     }
   }
 }
