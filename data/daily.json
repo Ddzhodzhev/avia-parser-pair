@@ -486,7 +486,12 @@
           "block": "<b>Москва ↔ Пхукет · ≤1 пересадки</b>\n08.03–24.03 · <b>50144 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW0803HKT23031?t=CZ18045174001804609500001295SVOCANHKT18058440001805893200001060HKTCANSVO_dccf8e5b4ee4f483afcad63be226146d_50145&amp;search_date=23102026&amp;expected_price_uuid=01a16aa2-a283-8030-afb8-53cb46add80a&amp;static_fare_key=TY%7CP1%7CH1%7CL1_1_23%7CCH1%7CR1%7CTBC1&amp;itinerary_key=5SUmMjVyiT8TMqFVGLJvpw&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=50144\">Билет RT</a>",
           "observed": "06:27"
         }
-      }
+      },
+      "messages": [
+        "<b>🌙 Итоги дня · 24.10.2026 МСК</b>\nМинимумы за день · туда-обратно\n\n<b>Москва ↔ Нячанг · ≤1 пересадки</b>\n17.03–30.03 · <b>57202 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW1703CXR29031?t=CZ18052950001805362800000890SVOCANCXR18063360001806434100001875CXRCANSVO_ebf6ea315bf32dab5234e9f235d8ed71_58081&amp;search_date=23102026&amp;expected_price_uuid=01a16744-a0f0-8040-2978-ba95795b05c7&amp;static_fare_key=TY%7CP0%7CH1%7CL1_1_23%7CCH1%7CR1%7CTBC1&amp;itinerary_key=Voq6-pKtZqhCD3WRwlCvoQ&amp;origin_airports=1&amp;destination_airports=0&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=57202\">Билет RT</a>\nЗамечено в 06:27 МСК\n\n<b>Москва ↔ Пхукет · ≤1 пересадки</b>\n08.03–24.03 · <b>50144 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW0803HKT23031?t=CZ18045174001804609500001295SVOCANHKT18058440001805893200001060HKTCANSVO_dccf8e5b4ee4f483afcad63be226146d_50145&amp;search_date=23102026&amp;expected_price_uuid=01a16aa2-a283-8030-afb8-53cb46add80a&amp;static_fare_key=TY%7CP1%7CH1%7CL1_1_23%7CCH1%7CR1%7CTBC1&amp;itinerary_key=5SUmMjVyiT8TMqFVGLJvpw&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=50144\">Билет RT</a>\nЗамечено в 06:27 МСК\n\nЦены из кеша, найденные за день; наличие и цену проверьте по ссылкам."
+      ],
+      "sent_parts": 1,
+      "sent": true
     }
   }
 }
