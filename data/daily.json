@@ -561,6 +561,24 @@
       ],
       "sent_parts": 1,
       "sent": true
+    },
+    "2026-10-28": {
+      "runs": 1,
+      "partial": false,
+      "best": {
+        "CXR": {
+          "total": 61805.0,
+          "key": "b1c1bbb47d0d2f0a5760518e62e2b78e3a6c415df5bc783d6b198a1f3a8880ac",
+          "block": "<b>Москва ↔ Нячанг · ≤1 пересадки</b>\n01.03–15.03 · <b>61805 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW0103CXR15031?t=VN18039186001803993300001005SVOHANCXR18051186001805205000001680CXRHANSVO_1b29d0d7734bb92b6d0a29f6343ccca2_61804&amp;search_date=27102026&amp;expected_price_uuid=01a17f2f-f1d1-8030-e6fd-d84976fe50d4&amp;static_fare_key=TY%7CP1_JW%7CH1%7CL1_1_23%7CCH1%7CR1%7CTBC1&amp;itinerary_key=1xCOtqR7V8OfQ6LZBQztLg&amp;origin_airports=1&amp;destination_airports=0&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=61805\">Билет RT</a>",
+          "observed": "07:12"
+        },
+        "HKT": {
+          "total": 52631.0,
+          "key": "2dac69b1bf77674e5ce79369dc7128346a11153e872fb5b65b404197b101a9fc",
+          "block": "<b>Москва ↔ Пхукет · ≤1 пересадки</b>\n14.03–26.03 · <b>52631 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW1403HKT25031?t=CZ18050358001805148900001645SVOCANHKT18060168001806095700001555HKTCANSVO_4526b4dcb946f7c73c94cfd5d96f9c41_52567&amp;search_date=26102026&amp;expected_price_uuid=01a17799-eb0c-8030-aaa8-2232aaa64585&amp;static_fare_key=TY%7CP1%7CH1%7CL1_1_23%7CCH1%7CR1%7CTBC1&amp;itinerary_key=G-G_7m2FLILtDNDDoAMBDg&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=52631\">Билет RT</a>",
+          "observed": "07:12"
+        }
+      }
     }
   }
 }
