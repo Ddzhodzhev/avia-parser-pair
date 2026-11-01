@@ -650,14 +650,14 @@
       "sent": true
     },
     "2026-11-01": {
-      "runs": 1,
+      "runs": 2,
       "partial": false,
       "best": {
         "CXR": {
-          "total": 61524.0,
-          "key": "617aa1aeb4439d66d6e20c31716fc064fe1a12c6f56e54449f8968f0c118d582",
-          "block": "<b>Москва ↔ Нячанг · ≤1 пересадки</b>\n12.04–24.04 · <b>61524 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW1204CXR24041?t=VN18075474001807636800001250SVOHANCXR18085698001808665200001830CXRHANSVO_8acfcb476fe5d3e8cd5cf23ba5bacd1a_61524&amp;search_date=31102026&amp;expected_price_uuid=01a1939f-1e4f-8031-2eb2-c798347baad2&amp;static_fare_key=TY%7CP1_JW%7CH1%7CL1_1_23%7CCH1%7CR1%7CTBC1&amp;itinerary_key=81YOdjBeKW_slU5rfEFmPw&amp;origin_airports=1&amp;destination_airports=0&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=61524\">Билет RT</a>",
-          "observed": "07:37"
+          "total": 61523.0,
+          "key": "95980a4f34e8c990115188f26fa41a3c9716610912f33131c38b38b6f3bf7b4d",
+          "block": "<b>Москва ↔ Нячанг · ≤1 пересадки</b>\n25.04–09.05 · <b>61523 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW2504CXR08051?t=VN18086706001808760000001250SVOHANCXR18097989001809874800001505CXRHANSVO_4ff6fb08fa40a3c8b37c63ff448d3884_61523&amp;search_date=01112026&amp;expected_price_uuid=01a196d2-9fd3-8031-222a-b05e61a19ddc&amp;static_fare_key=TY%7CP1_JW%7CH1%7CL1_1_23%7CCH1%7CR1%7CTBC1&amp;itinerary_key=O7MBlSDMMMT9u2QGhtWNIA&amp;origin_airports=1&amp;destination_airports=0&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=61523\">Билет RT</a>",
+          "observed": "17:45"
         },
         "HKT": {
           "total": 54973.0,
