@@ -686,7 +686,7 @@
       "sent": true
     },
     "2026-11-13": {
-      "runs": 1,
+      "runs": 2,
       "partial": false,
       "best": {
         "CXR": {
@@ -696,10 +696,10 @@
           "observed": "08:17"
         },
         "HKT": {
-          "total": 54463.0,
-          "key": "967195d717c60c03e4961ca8bf74876783070b3b102acee7c23766ff86e28809",
-          "block": "<b>Москва ↔ Пхукет · ≤1 пересадки</b>\n10.03–22.03 · <b>54463 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW1003HKT1?t=C618047076001804767300000755VKOTASHKT_c92ab2ac812f684a9a15b7a3e3a605a6_25563&amp;search_date=13112026&amp;expected_price_uuid=01a1d2e8-3cb0-8030-e1dd-7ffdc5b9351a&amp;static_fare_key=TY%7CP1%7CH0%7CL0%7CCH0%7CR0%7CTBC0&amp;itinerary_key=y4vyPa2c1Q-Sw9BNBlzgqg&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=25564\">VKO→HKT</a> / <a href=\"https://www.aviasales.ru/search/HKT2203MOW1?t=C618057231001805778900001170HKTTASVKO_12b9b195d814807cf812700fe98b32ee_28899&amp;search_date=13112026&amp;expected_price_uuid=01a1d320-a961-8030-ea70-6f8226e21052&amp;static_fare_key=TY%7CP0%7CH0%7CL0%7CCH0%7CR0%7CTBC0&amp;itinerary_key=zGjzAsREbhsRfEaiJPVFtg&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=28899\">HKT→VKO</a>",
-          "observed": "08:17"
+          "total": 54283.0,
+          "key": "4253c154550d7c4a07fcf9d49a6f725cdaab45e11515951c890e699abcaeea51",
+          "block": "<b>Москва ↔ Пхукет · ≤1 пересадки</b>\n22.03–06.04 · <b>54283 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW2203HKT1?t=S718057522001805823900000955DMEOVBHKT_dbb40d1b5cb9b8492b456fbc77570715_23302&amp;search_date=13112026&amp;expected_price_uuid=01a1d581-8702-8031-276a-638190c24cbf&amp;static_fare_key=TY%7CP1%7CH1%7CL0%7CCH1%7CR0%7CTBC0&amp;itinerary_key=GdK74fNDYCHAtgbfxHo63w&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=23302\">DME→HKT</a> / <a href=\"https://www.aviasales.ru/search/HKT0504MOW1?t=CA18069531001807026300001460HKTPEKSVO_cb8894b449b56573233e04549fc637ea_30981&amp;search_date=13112026&amp;expected_price_uuid=01a1d583-e027-8031-6be4-0c85e1d4c864&amp;static_fare_key=TY%7CP1%7CH1%7CL1_1_23%7CCH1%7CR0%7CTBC1&amp;itinerary_key=FnIiZoR-cisQqi62OHCi9g&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=30981\">HKT→SVO</a>",
+          "observed": "18:55"
         }
       }
     }
