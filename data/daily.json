@@ -701,7 +701,12 @@
           "block": "<b>Москва ↔ Пхукет · ≤1 пересадки</b>\n14.05–29.05 · <b>56474 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW1405HKT29051?t=HY18102948001810370700001025DMETASHKT18115863001811665200001555HKTTASVKO_9d5597be517e9f007b072a01ff6f48f8_56302&amp;search_date=24112026&amp;expected_price_uuid=01a20c0f-be2e-8030-2de1-4f21ab0fa9d0&amp;static_fare_key=TY%7CP0%7CH1%7CL0%7CCH0%7CR0%7CTBC0&amp;itinerary_key=CbpBxDBLSh_2QCdEyg30EQ&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=56474\">Билет RT</a>",
           "observed": "03:23"
         }
-      }
+      },
+      "messages": [
+        "<b>🌙 Итоги дня · 25.11.2026 МСК</b>\nМинимумы за день · туда-обратно\n\n<b>Москва ↔ Нячанг · ≤1 пересадки</b>\n22.04–06.05 · <b>65500 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW2204CXR05051?t=3U18084321001808505300000980SVOTFUCXR18095457001809634800001725CXRTFUSVO_1f89df42046c08b64d35bcb31352e3f4_65912&amp;search_date=22112026&amp;expected_price_uuid=01a201bf-eb7f-8031-6158-52cd32f6545e&amp;static_fare_key=TY%7CP1%7CH1%7CL1_1_23%7CCH0%7CR0%7CTBC1&amp;itinerary_key=dsnMSnD0Wa31rqAc9rDhww&amp;origin_airports=1&amp;destination_airports=0&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=65500\">Билет RT</a>\nЗамечено в 03:23 МСК\n\n<b>Москва ↔ Пхукет · ≤1 пересадки</b>\n14.05–29.05 · <b>56474 ₽</b> · <a href=\"https://www.aviasales.ru/search/MOW1405HKT29051?t=HY18102948001810370700001025DMETASHKT18115863001811665200001555HKTTASVKO_9d5597be517e9f007b072a01ff6f48f8_56302&amp;search_date=24112026&amp;expected_price_uuid=01a20c0f-be2e-8030-2de1-4f21ab0fa9d0&amp;static_fare_key=TY%7CP0%7CH1%7CL0%7CCH0%7CR0%7CTBC0&amp;itinerary_key=CbpBxDBLSh_2QCdEyg30EQ&amp;expected_price_source=share&amp;expected_price_currency=rub&amp;expected_price=56474\">Билет RT</a>\nЗамечено в 03:23 МСК\n\nЦены из кеша, найденные за день; наличие и цену проверьте по ссылкам."
+      ],
+      "sent_parts": 1,
+      "sent": true
     }
   }
 }
